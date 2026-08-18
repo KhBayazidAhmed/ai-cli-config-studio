@@ -1,5 +1,6 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import {
+  configPaths,
   createSetupCommand,
   getRevertCommand,
 } from "../public/commands.js";
@@ -69,7 +70,7 @@ describe("model discovery", () => {
   });
 });
 
-describe("generated commands for Claude Code", () => {
+describe("permanent configuration for Claude Code", () => {
   const values = {
     baseUrl: "https://9router.eminai.cloud/v1",
     apiKey: "sk-ant-test",
@@ -77,30 +78,36 @@ describe("generated commands for Claude Code", () => {
     client: "claude",
   };
 
-  test("generates Claude Code environment command on macOS/Linux", () => {
+  test("generates permanent backup & settings.json write on macOS/Linux", () => {
     const command = createSetupCommand("unix", values);
 
-    expect(command).toBe(
-      "export ANTHROPIC_BASE_URL='https://9router.eminai.cloud/v1' && export ANTHROPIC_AUTH_TOKEN='sk-ant-test' && claude --model 'claude-3-7-sonnet'",
-    );
-    expect(getRevertCommand("unix", "claude")).toBe(
-      "unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN",
-    );
+    expect(command).toContain('mkdir -p "$HOME/.claude"');
+    expect(command).toContain("settings.json.bak-$(date");
+    expect(command).toContain('cat << \'EOF\' > "$HOME/.claude/settings.json"');
+    expect(command).toContain('"ANTHROPIC_BASE_URL": "https://9router.eminai.cloud/v1"');
+    expect(command).toContain('"ANTHROPIC_AUTH_TOKEN": "sk-ant-test"');
+    expect(command).toContain('"ANTHROPIC_MODEL": "claude-3-7-sonnet"');
+
+    const revert = getRevertCommand("unix", "claude");
+    expect(revert).toContain('settings.json.bak-*');
+    expect(revert).toContain('cp "$latest" "$HOME/.claude/settings.json"');
   });
 
-  test("generates Claude Code environment command on Windows", () => {
+  test("generates permanent backup & settings.json write on Windows", () => {
     const command = createSetupCommand("windows", values);
 
-    expect(command).toBe(
-      "$env:ANTHROPIC_BASE_URL = 'https://9router.eminai.cloud/v1'; $env:ANTHROPIC_AUTH_TOKEN = 'sk-ant-test'; claude --model 'claude-3-7-sonnet'",
-    );
-    expect(getRevertCommand("windows", "claude")).toBe(
-      "Remove-Item env:ANTHROPIC_BASE_URL, env:ANTHROPIC_AUTH_TOKEN -ErrorAction SilentlyContinue",
-    );
+    expect(command).toContain("Join-Path $HOME '.claude'");
+    expect(command).toContain('"$config.bak-$(Get-Date');
+    expect(command).toContain("Set-Content -Path $config -Encoding UTF8");
+    expect(command).toContain('"ANTHROPIC_BASE_URL": "https://9router.eminai.cloud/v1"');
+
+    const revert = getRevertCommand("windows", "claude");
+    expect(revert).toContain('"$config.bak-*"');
+    expect(revert).toContain("Copy-Item $latest.FullName $config -Force");
   });
 });
 
-describe("generated commands for Codex CLI", () => {
+describe("permanent configuration for Codex CLI", () => {
   const values = {
     baseUrl: "https://api.openai.com/v1",
     apiKey: "sk-openai-test",
@@ -108,30 +115,32 @@ describe("generated commands for Codex CLI", () => {
     client: "codex",
   };
 
-  test("generates Codex CLI environment command on macOS/Linux", () => {
+  test("generates permanent backup & config.json write on macOS/Linux", () => {
     const command = createSetupCommand("unix", values);
 
-    expect(command).toBe(
-      "export OPENAI_BASE_URL='https://api.openai.com/v1' && export OPENAI_API_KEY='sk-openai-test' && codex --model 'gpt-4o'",
-    );
-    expect(getRevertCommand("unix", "codex")).toBe(
-      "unset OPENAI_BASE_URL OPENAI_API_KEY",
-    );
+    expect(command).toContain('mkdir -p "$HOME/.config/codex"');
+    expect(command).toContain("config.json.bak-$(date");
+    expect(command).toContain('"baseUrl": "https://api.openai.com/v1"');
+    expect(command).toContain('"apiKey": "sk-openai-test"');
+    expect(command).toContain('"model": "gpt-4o"');
+
+    const revert = getRevertCommand("unix", "codex");
+    expect(revert).toContain('config.json.bak-*');
   });
 
-  test("generates Codex CLI environment command on Windows", () => {
+  test("generates permanent backup & config.json write on Windows", () => {
     const command = createSetupCommand("windows", values);
 
-    expect(command).toBe(
-      "$env:OPENAI_BASE_URL = 'https://api.openai.com/v1'; $env:OPENAI_API_KEY = 'sk-openai-test'; codex --model 'gpt-4o'",
-    );
-    expect(getRevertCommand("windows", "codex")).toBe(
-      "Remove-Item env:OPENAI_BASE_URL, env:OPENAI_API_KEY -ErrorAction SilentlyContinue",
-    );
+    expect(command).toContain("Join-Path $HOME '.config\\codex'");
+    expect(command).toContain('"$config.bak-$(Get-Date');
+    expect(command).toContain("Set-Content -Path $config -Encoding UTF8");
+
+    const revert = getRevertCommand("windows", "codex");
+    expect(revert).toContain("Copy-Item $latest.FullName $config -Force");
   });
 });
 
-describe("generated commands for Aider", () => {
+describe("permanent configuration for Aider", () => {
   const values = {
     baseUrl: "https://9router.eminai.cloud/v1",
     apiKey: "sk-aider-test",
@@ -139,24 +148,32 @@ describe("generated commands for Aider", () => {
     client: "aider",
   };
 
-  test("generates Aider command with direct flags on macOS/Linux", () => {
+  test("generates permanent backup & .aider.conf.yml write on macOS/Linux", () => {
     const command = createSetupCommand("unix", values);
 
-    expect(command).toBe(
-      "aider --openai-api-base 'https://9router.eminai.cloud/v1' --openai-api-key 'sk-aider-test' --model 'cx/gpt-5.3-codex-spark'",
-    );
+    expect(command).toContain(".aider.conf.yml.bak-$(date");
+    expect(command).toContain('cat << \'EOF\' > "$HOME/.aider.conf.yml"');
+    expect(command).toContain("openai-api-base: https://9router.eminai.cloud/v1");
+    expect(command).toContain("openai-api-key: sk-aider-test");
+    expect(command).toContain("model: openai/cx/gpt-5.3-codex-spark");
+
+    const revert = getRevertCommand("unix", "aider");
+    expect(revert).toContain('.aider.conf.yml.bak-*');
   });
 
-  test("generates Aider command with direct flags on Windows", () => {
+  test("generates permanent backup & .aider.conf.yml write on Windows", () => {
     const command = createSetupCommand("windows", values);
 
-    expect(command).toBe(
-      "aider --openai-api-base 'https://9router.eminai.cloud/v1' --openai-api-key 'sk-aider-test' --model 'cx/gpt-5.3-codex-spark'",
-    );
+    expect(command).toContain("Join-Path $HOME '.aider.conf.yml'");
+    expect(command).toContain('"$config.bak-$(Get-Date');
+    expect(command).toContain("Set-Content -Path $config -Encoding UTF8");
+
+    const revert = getRevertCommand("windows", "aider");
+    expect(revert).toContain("Copy-Item $latest.FullName $config -Force");
   });
 });
 
-describe("generated commands for OpenCode", () => {
+describe("permanent configuration for OpenCode", () => {
   const values = {
     baseUrl: "https://api.together.xyz/v1",
     apiKey: "sk-together-test",
@@ -164,20 +181,36 @@ describe("generated commands for OpenCode", () => {
     client: "opencode",
   };
 
-  test("generates OpenCode command on macOS/Linux", () => {
+  test("generates permanent backup & opencode.json write on macOS/Linux", () => {
     const command = createSetupCommand("unix", values);
 
-    expect(command).toBe(
-      "export OPENAI_BASE_URL='https://api.together.xyz/v1' && export OPENAI_API_KEY='sk-together-test' && opencode --model 'meta-llama/llama-3.3-70b-instruct'",
-    );
+    expect(command).toContain('mkdir -p "$HOME/.config/opencode"');
+    expect(command).toContain("opencode.json.bak-$(date");
+    expect(command).toContain('"baseUrl": "https://api.together.xyz/v1"');
+    expect(command).toContain('"apiKey": "sk-together-test"');
+
+    const revert = getRevertCommand("unix", "opencode");
+    expect(revert).toContain('opencode.json.bak-*');
   });
 
-  test("generates OpenCode command on Windows", () => {
+  test("generates permanent backup & opencode.json write on Windows", () => {
     const command = createSetupCommand("windows", values);
 
-    expect(command).toBe(
-      "$env:OPENAI_BASE_URL = 'https://api.together.xyz/v1'; $env:OPENAI_API_KEY = 'sk-together-test'; opencode --model 'meta-llama/llama-3.3-70b-instruct'",
-    );
+    expect(command).toContain("Join-Path $HOME '.config\\opencode'");
+    expect(command).toContain('"$config.bak-$(Get-Date');
+    expect(command).toContain("Set-Content -Path $config -Encoding UTF8");
+
+    const revert = getRevertCommand("windows", "opencode");
+    expect(revert).toContain("Copy-Item $latest.FullName $config -Force");
+  });
+});
+
+describe("configPaths mapping", () => {
+  test("defines paths for all supported clients", () => {
+    expect(configPaths.claude.unix).toBe("~/.claude/settings.json");
+    expect(configPaths.codex.unix).toBe("~/.config/codex/config.json");
+    expect(configPaths.aider.unix).toBe("~/.aider.conf.yml");
+    expect(configPaths.opencode.unix).toBe("~/.config/opencode/opencode.json");
   });
 });
 

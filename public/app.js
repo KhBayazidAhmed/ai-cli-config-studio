@@ -1,4 +1,8 @@
-import { createSetupCommand, getRevertCommand } from "./commands.js";
+import {
+  configPaths,
+  createSetupCommand,
+  getRevertCommand,
+} from "./commands.js";
 
 const form = document.querySelector("#models-form");
 const baseUrlInput = document.querySelector("#base-url");
@@ -117,50 +121,33 @@ function updateOutput() {
     badgeText.textContent = isReady ? "Ready" : "Waiting";
   }
 
-  summaryClient.textContent = clientLabels[client] || "Claude Code";
+  const name = clientLabels[client] || "Claude Code";
+  summaryClient.textContent = name;
   summaryModel.textContent = modelSelect.value || "Not selected";
   summaryPlatform.textContent =
     platform === "windows" ? "Windows" : "macOS / Linux";
 
-  // Revert / Reset command
+  // Revert / Restore command
   const revertCmd = getRevertCommand(platform, client);
   if (revertCommandElement) {
     revertCommandElement.textContent = revertCmd;
   }
 
+  const pathInfo =
+    configPaths[client]?.[platform === "windows" ? "windows" : "unix"] || "";
+
   if (revertCopy && revertHeaderTitle && revertHeaderDesc) {
-    if (client === "aider") {
-      revertHeaderTitle.textContent = "Reset Environment";
-      revertHeaderDesc.textContent = "Aider flags are self-contained";
-      revertCopy.textContent =
-        "Aider is executed directly with CLI parameters. No persistent environment variables need to be cleared.";
-      if (copyRevertText) copyRevertText.textContent = "Copy Reset Note";
-    } else {
-      const name = clientLabels[client] || "AI CLI";
-      revertHeaderTitle.textContent = `Reset ${name} Environment`;
-      revertHeaderDesc.textContent = "Unset session environment variables";
-      revertCopy.textContent = `Run this command in your ${
-        platform === "windows" ? "PowerShell" : "terminal"
-      } to unset session environment variables for ${name}.`;
-      if (copyRevertText) copyRevertText.textContent = "Copy Reset Command";
-    }
+    revertHeaderTitle.textContent = `Restore Previous ${name} Config`;
+    revertHeaderDesc.textContent = "Revert to your newest backup";
+    revertCopy.innerHTML = `Run this command in your ${
+      platform === "windows" ? "PowerShell" : "terminal"
+    } to restore the previous backup of <code>${pathInfo}</code>.`;
+    if (copyRevertText) copyRevertText.textContent = "Copy Restore Command";
   }
 
   // Banner details
   if (securityBannerText) {
-    if (client === "claude") {
-      securityBannerText.innerHTML =
-        "<strong>Session Setup:</strong> Exports <code>ANTHROPIC_BASE_URL</code> and auth token for your terminal session, then launches Claude Code.";
-    } else if (client === "codex") {
-      securityBannerText.innerHTML =
-        "<strong>Session Setup:</strong> Exports <code>OPENAI_BASE_URL</code> and API key for your terminal session, then launches Codex CLI.";
-    } else if (client === "aider") {
-      securityBannerText.innerHTML =
-        "<strong>Direct Invocation:</strong> Passes gateway base URL and API key directly as command arguments to Aider.";
-    } else {
-      securityBannerText.innerHTML =
-        "<strong>Session Setup:</strong> Exports <code>OPENAI_BASE_URL</code> and API key for your terminal session, then launches OpenCode.";
-    }
+    securityBannerText.innerHTML = `<strong>Permanent Configuration:</strong> Creates a timestamped backup before writing settings to <code>${pathInfo}</code>. Persists across all terminal sessions.`;
   }
 
   // Step badges
@@ -350,7 +337,7 @@ copyRevertButton.addEventListener("click", async () => {
     copyIcon.classList.add("hidden");
     checkIcon.classList.remove("hidden");
   }
-  if (btnText) btnText.textContent = "Command Copied";
+  if (btnText) btnText.textContent = "Restore Command Copied";
 
   setTimeout(() => {
     if (copyIcon && checkIcon) {
@@ -358,11 +345,11 @@ copyRevertButton.addEventListener("click", async () => {
       checkIcon.classList.add("hidden");
     }
     if (btnText) {
-      btnText.textContent = copyRevertText ? copyRevertText.textContent : "Copy Reset Command";
+      btnText.textContent = copyRevertText ? copyRevertText.textContent : "Copy Restore Command";
     }
   }, 1800);
 
-  showToast("Reset command copied");
+  showToast("Restore command copied");
 });
 
 // Initial update

@@ -1,0 +1,20 @@
+# Docker Compose configuration to pull and build directly from GitHub repository
+services:
+  ai-cli-config-studio:
+    build:
+      context: https://github.com/KhBayazidAhmed/ai-cli-config-studio.git#main
+      dockerfile: Dockerfile
+    image: ai-cli-config-studio:latest
+    container_name: ai-cli-config-studio
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
