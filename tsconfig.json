@@ -1,0 +1,3 @@
+{
+  "extends": "@herness-config/config/tsconfig.base.json"
+}
