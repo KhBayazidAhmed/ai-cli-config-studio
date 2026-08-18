@@ -1,97 +1,54 @@
-# herness-config
+# AI CLI Config Studio
 
-This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Start, Self, and more.
+A fast, lightweight, dependency-free Bun web app that discovers models from any public OpenAI-compatible gateway (e.g. 9Router, OpenRouter, DeepSeek, Groq, Together AI) and generates exact, ready-to-run terminal commands for popular AI coding CLIs:
 
-## Features
+- 🟣 **Claude Code (`claude`)**
+- 🟢 **OpenAI Codex CLI (`codex`)**
+- 🔵 **Aider (`aider`)**
+- 🟠 **OpenCode (`opencode`)**
 
-- **TypeScript** - For type safety and improved developer experience
-- **TanStack Start** - SSR framework with TanStack Router
-- **TailwindCSS** - Utility-first CSS for rapid UI development
-- **Shared UI package** - shadcn/ui primitives live in `packages/ui`
-- **Biome** - Linting and formatting
-- **Husky** - Git hooks for code quality
-- **Turborepo** - Optimized monorepo build system
+---
 
-## Getting Started
+## 🚀 Getting Started
 
-First, install the dependencies:
-
-```bash
-bun install
-```
-
-Then, run the development server:
+Start the local development server:
 
 ```bash
 bun run dev
 ```
 
-Open [http://localhost:3001](http://localhost:3001) in your browser to see the fullstack application.
+Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## UI Customization
+---
 
-React web apps in this stack share shadcn/ui primitives through `packages/ui`.
+## ✨ Features & How It Works
 
-- Change design tokens and global styles in `packages/ui/src/styles/globals.css`
-- Update shared primitives in `packages/ui/src/components/*`
-- Adjust shadcn aliases or style config in `packages/ui/components.json` and `apps/web/components.json`
+1. **Step 1: Connect your AI Provider**
+   - Click a quick preset (9Router, OpenRouter, DeepSeek, Groq, Together AI) or enter your custom API Base URL.
+   - Enter your API Key and click **Fetch Models**.
+   - *Privacy Guarantee:* Your API Key is only used in memory to discover models and generate your local terminal command. It is never saved or logged in any database.
 
-### Add more shared components
+2. **Step 2: Configure Preferences**
+   - **AI Coding CLI:** Choose your target assistant:
+     - **Claude Code (`claude`)**: Exports `ANTHROPIC_BASE_URL` & `ANTHROPIC_AUTH_TOKEN` and launches `claude`.
+     - **Codex CLI (`codex`)**: Exports `OPENAI_BASE_URL` & `OPENAI_API_KEY` and launches `codex`.
+     - **Aider (`aider`)**: Passes gateway parameters via `--openai-api-base` and `--openai-api-key`.
+     - **OpenCode (`opencode`)**: Exports `OPENAI_BASE_URL` & `OPENAI_API_KEY` and launches `opencode`.
+   - **Target Model:** Select from the models retrieved from your provider.
+   - **Operating System:** Pick **macOS / Linux** (`bash`/`zsh`) or **Windows** (`PowerShell`).
 
-Run this from the project root to add more primitives to the shared UI package:
+3. **Step 3: Copy & Run in Terminal**
+   - Generates the exact, copy-paste terminal command with shell quoting and proper escaping.
+   - Includes one-click **Reset Commands** to quickly unset session environment variables when you are done.
+
+---
+
+## 🧪 Testing & Verification
 
 ```bash
-npx shadcn@latest add accordion dialog popover sheet table -c packages/ui
+# Run unit tests
+bun test
+
+# Run build bundle check
+bun run check
 ```
-
-Import shared components like this:
-
-```tsx
-import { Button } from "@herness-config/ui/components/button";
-```
-
-### Add app-specific blocks
-
-If you want to add app-specific blocks instead of shared primitives, run the shadcn CLI from `apps/web`.
-
-## Deployment
-
-### Docker Compose
-
-- Target: web + server
-- Config: `docker-compose.yml` (app Dockerfiles live in `apps/*/Dockerfile`)
-- Build images: bun run docker:build
-- Start: bun run docker:up
-- Logs: bun run docker:logs
-- Stop: bun run docker:down
-
-Environment variables are read from each app's `.env` file (baked into web builds for public variables) and overridden in `docker-compose.yml` for container networking.
-
-For more details, see the guide on [Deploying with Docker Compose](https://www.better-t-stack.dev/docs/guides/docker).
-
-## Git Hooks and Formatting
-
-- Initialize hooks: `bun run prepare`
-- Run checks: `bun run check`
-
-## Project Structure
-
-```
-herness-config/
-├── apps/
-│   └── web/         # Fullstack application (React + TanStack Start)
-├── packages/
-│   ├── ui/          # Shared shadcn/ui components and styles
-```
-
-## Available Scripts
-
-- `bun run dev`: Start all applications in development mode
-- `bun run build`: Build all applications
-- `bun run dev:web`: Start only the web application
-- `bun run check-types`: Check TypeScript types across all apps
-- `bun run check`: Run Biome formatting and linting
-- `bun run docker:build`: Build the Docker Compose images
-- `bun run docker:up`: Build and start the Docker Compose stack
-- `bun run docker:logs`: Tail logs from the Docker Compose stack
-- `bun run docker:down`: Stop the Docker Compose stack
