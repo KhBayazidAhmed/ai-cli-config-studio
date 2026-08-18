@@ -1,68 +1,88 @@
-const port = Number(Bun.env.PORT ?? 3000);
+/**
+ * AI CLI Config Studio - Backend Server & Gateway Proxy
+ * Handles model discovery requests and serves static frontend assets.
+ */
 
-function json(data: unknown, status = 200) {
+const PORT = Number(Bun.env.PORT ?? 3000);
+
+/**
+ * Standard JSON response helper with no-store cache control.
+ */
+function jsonResponse(data: unknown, status = 200): Response {
   return Response.json(data, {
     status,
     headers: { "Cache-Control": "no-store" },
   });
 }
 
-function gatewayModelsUrl(input: string) {
-  const url = new URL(input.match(/^https?:\/\//i) ? input : `https://${input}`);
+/**
+ * Validates and normalizes the AI provider gateway URL.
+ * Prevents Server-Side Request Forgery (SSRF) to private or localhost addresses.
+ */
+export function sanitizeGatewayUrl(input: string): URL {
+  const normalized = input.match(/^https?:\/\//i) ? input : `https://${input}`;
+  const url = new URL(normalized);
 
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new Error("Only HTTP and HTTPS gateway URLs are supported.");
   }
 
-  const hostname = url.hostname.toLowerCase();
-  const blockedHostname =
-    hostname === "localhost" ||
-    hostname.endsWith(".localhost") ||
-    hostname.endsWith(".local") ||
-    hostname === "0.0.0.0" ||
-    hostname === "::1" ||
-    hostname.startsWith("127.") ||
-    hostname.startsWith("10.") ||
-    hostname.startsWith("192.168.") ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
-    hostname.startsWith("169.254.");
+  const host = url.hostname.toLowerCase();
+  const isPrivateOrLocal =
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host === "0.0.0.0" ||
+    host === "::1" ||
+    host.startsWith("127.") ||
+    host.startsWith("10.") ||
+    host.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    host.startsWith("169.254.");
 
-  if (blockedHostname) {
+  if (isPrivateOrLocal) {
     throw new Error("Local and private network gateway URLs are not allowed.");
   }
 
-  if (!url.pathname.replace(/\/$/, "").endsWith("/models")) {
-    url.pathname = `${url.pathname.replace(/\/$/, "")}/models`;
+  // Ensure path ends in /models per OpenAI compatibility standard
+  const cleanPath = url.pathname.replace(/\/+$/, "");
+  if (!cleanPath.endsWith("/models")) {
+    url.pathname = `${cleanPath}/models`;
   }
   url.hash = "";
+
   return url;
 }
 
-async function models(request: Request) {
+/**
+ * Handles POST /api/models to discover models from an OpenAI-compatible gateway.
+ */
+async function handleModelsDiscovery(request: Request): Promise<Response> {
   let body: { baseUrl?: string; apiKey?: string };
 
   try {
     body = await request.json();
   } catch {
-    return json({ error: "Invalid JSON body." }, 400);
+    return jsonResponse({ error: "Invalid JSON request body." }, 400);
   }
 
-  if (!body.baseUrl?.trim()) {
-    return json({ error: "Base URL is required." }, 400);
+  const rawBaseUrl = body.baseUrl?.trim();
+  if (!rawBaseUrl) {
+    return jsonResponse({ error: "Base URL is required." }, 400);
   }
 
   let modelsUrl: URL;
   try {
-    modelsUrl = gatewayModelsUrl(body.baseUrl.trim());
+    modelsUrl = sanitizeGatewayUrl(rawBaseUrl);
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Invalid gateway URL.";
-    return json({ error: message }, 400);
+    const message = error instanceof Error ? error.message : "Invalid gateway URL.";
+    return jsonResponse({ error: message }, 400);
   }
 
   const headers = new Headers({ Accept: "application/json" });
-  if (body.apiKey?.trim()) {
-    headers.set("Authorization", `Bearer ${body.apiKey.trim()}`);
+  const rawApiKey = body.apiKey?.trim();
+  if (rawApiKey) {
+    headers.set("Authorization", `Bearer ${rawApiKey}`);
   }
 
   try {
@@ -85,13 +105,13 @@ async function models(request: Request) {
             ? errorPayload.error
             : errorPayload.error?.message || errorPayload.message || detail;
       } catch {
-        if (responseText && responseText.length < 240) detail = responseText;
+        if (responseText && responseText.length < 240) {
+          detail = responseText;
+        }
       }
 
-      const status = response.status >= 400 && response.status < 500
-        ? response.status
-        : 502;
-      return json(
+      const status = response.status >= 400 && response.status < 500 ? response.status : 502;
+      return jsonResponse(
         { error: `Gateway returned ${response.status}: ${detail || "Request failed"}` },
         status,
       );
@@ -100,6 +120,7 @@ async function models(request: Request) {
     const payload = (await response.json()) as {
       data?: Array<{ id?: string }>;
     };
+
     const discovered = [
       ...new Set(
         (payload.data ?? [])
@@ -109,29 +130,38 @@ async function models(request: Request) {
     ].sort();
 
     if (!discovered.length) {
-      return json({ error: "The gateway returned no models." }, 502);
+      return jsonResponse({ error: "The gateway returned no models." }, 502);
     }
 
-    return json({ models: discovered });
+    return jsonResponse({ models: discovered });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Gateway request failed.";
-    return json({ error: message }, 502);
+    const message = error instanceof Error ? error.message : "Gateway request failed.";
+    return jsonResponse({ error: message }, 502);
   }
 }
 
+/**
+ * Static asset route mapping.
+ */
 const staticFiles: Record<string, string> = {
   "/": "public/index.html",
+  "/index.html": "public/index.html",
+  "/docs": "public/docs.html",
+  "/dpcs": "public/docs.html",
+  "/docs.html": "public/docs.html",
   "/app.js": "public/app.js",
   "/commands.js": "public/commands.js",
   "/styles.css": "public/styles.css",
 };
 
-export async function handleRequest(request: Request) {
+/**
+ * Main HTTP request router.
+ */
+export async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
 
   if (request.method === "POST" && url.pathname === "/api/models") {
-    return models(request);
+    return handleModelsDiscovery(request);
   }
 
   if (request.method === "GET" && staticFiles[url.pathname]) {
@@ -141,7 +171,8 @@ export async function handleRequest(request: Request) {
   return new Response("Not found", { status: 404 });
 }
 
+// Start server when executed directly
 if (import.meta.main) {
-  const server = Bun.serve({ port, fetch: handleRequest });
-  console.log(`Herness Config running at ${server.url}`);
+  const server = Bun.serve({ port: PORT, fetch: handleRequest });
+  console.log(`AI CLI Config Studio running at ${server.url}`);
 }

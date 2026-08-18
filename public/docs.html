@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Comprehensive user guide and documentation for AI CLI Config Studio — learn how to use the studio to configure Claude Code, Codex, Aider, and OpenCode with automatic backups."
+    />
+    <title>How to Use &amp; Documentation — AI CLI Config Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="docs-shell">
+      <!-- Navigation Header -->
+      <nav class="top-nav">
+        <div class="nav-left">
+          <a class="brand" href="/" aria-label="AI CLI Config Studio Home">
+            <span class="brand-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="4 17 10 11 4 5"></polyline>
+                <line x1="12" y1="19" x2="20" y2="19"></line>
+              </svg>
+            </span>
+            <span class="brand-name">AI CLI <span>Config Studio</span></span>
+          </a>
+        </div>
+        <div class="nav-right">
+          <div class="nav-links">
+            <a href="/" class="nav-link">Studio</a>
+            <a href="/docs" class="nav-link active">Documentation</a>
+            <a href="https://github.com/KhBayazidAhmed/ai-cli-config-studio" target="_blank" rel="noopener noreferrer" class="nav-link nav-link-external" aria-label="GitHub Repository">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"></path>
+                <path d="M9 18c-4.51 2-5-2-7-2"></path>
+              </svg>
+              <span>GitHub</span>
+            </a>
+          </div>
+          <div class="server-status">
+            <span class="status-indicator-dot"></span>
+            <span>Local Proxy Ready</span>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Hero Header -->
+      <header class="docs-hero">
+        <h1>User Guide &amp; Documentation</h1>
+        <p>
+          Learn how to use AI CLI Config Studio to connect OpenAI-compatible gateways, discover authorized models, and configure AI coding CLIs with automatic backups.
+        </p>
+      </header>
+
+      <!-- Documentation Layout -->
+      <div class="docs-grid">
+        <!-- Sticky Sidebar Navigation -->
+        <aside class="docs-sidebar">
+          <div class="docs-sidebar-title">User Guide</div>
+          <ul class="docs-nav-list">
+            <li><a href="#how-to-use" class="docs-nav-link">How to Use (Quick Start)</a></li>
+            <li><a href="#cli-guides" class="docs-nav-link">CLI Usage &amp; Verification</a></li>
+            <li><a href="#rollback-guide" class="docs-nav-link">Restoring Backups</a></li>
+            <li><a href="#supported-clis" class="docs-nav-link">Supported CLIs &amp; Paths</a></li>
+            <li><a href="#gateways" class="docs-nav-link">Gateways &amp; Presets</a></li>
+            <li><a href="#privacy-security" class="docs-nav-link">Privacy &amp; Security</a></li>
+            <li><a href="#docker-deployment" class="docs-nav-link">Deployment &amp; Docker</a></li>
+          </ul>
+        </aside>
+
+        <!-- Main Content Column -->
+        <div class="docs-main">
+          <!-- 1. How to Use Section -->
+          <section class="docs-section" id="how-to-use">
+            <h2>📖 How to Use AI CLI Config Studio</h2>
+            <p>
+              Setting up your AI coding assistant with a custom gateway takes less than 30 seconds using the 3-step workflow:
+            </p>
+
+            <!-- Step 1 Card -->
+            <div class="docs-step-card">
+              <div class="docs-step-header">
+                <span class="docs-step-num">1</span>
+                <span class="docs-step-title">Connect your AI Gateway Provider</span>
+              </div>
+              <p>
+                Choose one of the quick presets (<strong>9Router</strong>, <strong>OpenRouter</strong>, <strong>DeepSeek</strong>, <strong>Groq</strong>, <strong>Together AI</strong>) or type your custom gateway URL into the <strong>Base URL</strong> input.
+              </p>
+              <p>
+                Enter your gateway API key into the <strong>API Key</strong> input and click <kbd>Fetch Models</kbd>.
+              </p>
+              <div class="docs-tip-box">
+                <strong>🔒 Security Guarantee:</strong> Your API key is used strictly in-memory to query your provider's <code>/models</code> endpoint and injected directly into your local clipboard command. It is never stored or transmitted to any third-party server.
+              </div>
+            </div>
+
+            <!-- Step 2 Card -->
+            <div class="docs-step-card">
+              <div class="docs-step-header">
+                <span class="docs-step-num">2</span>
+                <span class="docs-step-title">Select Assistant, Model &amp; Operating System</span>
+              </div>
+              <ul>
+                <li><strong>Target Assistant:</strong> Choose from <strong>Claude Code</strong>, <strong>Codex CLI</strong>, <strong>Aider</strong>, or <strong>OpenCode</strong>.</li>
+                <li><strong>Target Model:</strong> Select your preferred model from the dropdown populated by your gateway.</li>
+                <li><strong>Operating System:</strong> Choose <strong>macOS / Linux</strong> (<kbd>zsh</kbd>/<kbd>bash</kbd>) or <strong>Windows</strong> (<kbd>PowerShell</kbd>).</li>
+              </ul>
+            </div>
+
+            <!-- Step 3 Card -->
+            <div class="docs-step-card">
+              <div class="docs-step-header">
+                <span class="docs-step-num">3</span>
+                <span class="docs-step-title">Copy &amp; Execute the Generated Command</span>
+              </div>
+              <p>
+                Click <kbd>Copy Terminal Command</kbd> on the right panel. Then open your terminal application and paste the command.
+              </p>
+              <p>
+                The command will automatically:
+              </p>
+              <ol>
+                <li>Create a timestamped backup of any existing configuration (e.g. <code>~/.claude/settings.json.bak-YYYYMMDD-HHMMSS</code>).</li>
+                <li>Safely merge the gateway URL, authentication key, and model directly into your config file.</li>
+                <li>Preserve all of your other custom preferences, tools, and hooks.</li>
+              </ol>
+            </div>
+          </section>
+
+          <!-- 2. CLI Usage & Verification -->
+          <section class="docs-section" id="cli-guides">
+            <h2>💻 CLI Usage &amp; Verification Guides</h2>
+            <p>
+              After running the generated command in your terminal, verify that your assistant is connected to your gateway:
+            </p>
+
+            <h3>🟣 1. Claude Code (`claude`)</h3>
+            <p>
+              Launch Claude Code and check its active configuration status:
+            </p>
+            <pre class="docs-code-block"><code># Start Claude Code in any project
+claude
+
+# Inside Claude Code session, check gateway status:
+/status</code></pre>
+            <p>
+              You can also specify models on launch: <code>claude --model &lt;model-name&gt;</code>.
+            </p>
+
+            <h3>🟢 2. OpenAI Codex CLI (`codex`)</h3>
+            <p>
+              Your settings are saved to <code>~/.config/codex/config.json</code>. Launch Codex to start generating code:
+            </p>
+            <pre class="docs-code-block"><code># Run Codex CLI
+codex
+
+# Or pass a single prompt
+codex "Refactor the database queries in db.ts to use connection pooling"</code></pre>
+
+            <h3>🔵 3. Aider (`aider`)</h3>
+            <p>
+              Aider pairs with you in your terminal. Since settings are saved in <code>~/.aider.conf.yml</code>, simply run:
+            </p>
+            <pre class="docs-code-block"><code># Navigate to your git repository and run aider
+cd my-project
+aider</code></pre>
+
+            <h3>🟠 4. OpenCode (`opencode`)</h3>
+            <p>
+              OpenCode reads from <code>~/.config/opencode/opencode.json</code>. Launch it with:
+            </p>
+            <pre class="docs-code-block"><code># Start OpenCode TUI
+opencode</code></pre>
+          </section>
+
+          <!-- 3. Restoring Backups -->
+          <section class="docs-section" id="rollback-guide">
+            <h2>⏪ Restoring Previous Backups</h2>
+            <p>
+              Every time you generate and run a command, an automatic timestamped backup is made before modifying any files.
+            </p>
+            <p>
+              To revert to your previous configuration:
+            </p>
+            <ol>
+              <li>Go to the Studio page.</li>
+              <li>Expand the <strong>Restore Previous Config</strong> accordion below the terminal preview.</li>
+              <li>Click <kbd>Copy Restore Command</kbd>.</li>
+              <li>Paste and run the command in your terminal. It will automatically detect and reinstate your most recent <code>.bak-*</code> file.</li>
+            </ol>
+          </section>
+
+          <!-- 4. Supported CLIs & File Locations -->
+          <section class="docs-section" id="supported-clis">
+            <h2>📁 Configuration File Locations &amp; Schema</h2>
+            <p>
+              Below are the persistent configuration paths and schemas managed by AI CLI Config Studio:
+            </p>
+
+            <div class="docs-table-wrapper">
+              <table class="docs-table">
+                <thead>
+                  <tr>
+                    <th>CLI Tool</th>
+                    <th>macOS / Linux Path</th>
+                    <th>Windows Path</th>
+                    <th>Key Attributes Configured</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>Claude Code</strong></td>
+                    <td><code>~/.claude/settings.json</code></td>
+                    <td><code>$HOME\.claude\settings.json</code></td>
+                    <td><code>env.ANTHROPIC_BASE_URL</code>, <code>env.ANTHROPIC_AUTH_TOKEN</code>, <code>env.ANTHROPIC_MODEL</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Codex CLI</strong></td>
+                    <td><code>~/.config/codex/config.json</code></td>
+                    <td><code>$HOME\.config\codex\config.json</code></td>
+                    <td><code>baseUrl</code>, <code>apiKey</code>, <code>model</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>Aider</strong></td>
+                    <td><code>~/.aider.conf.yml</code></td>
+                    <td><code>$HOME\.aider.conf.yml</code></td>
+                    <td><code>openai-api-base</code>, <code>openai-api-key</code>, <code>model</code></td>
+                  </tr>
+                  <tr>
+                    <td><strong>OpenCode</strong></td>
+                    <td><code>~/.config/opencode/opencode.json</code></td>
+                    <td><code>$HOME\.config\opencode\opencode.json</code></td>
+                    <td><code>model</code>, <code>provider.openai.baseUrl</code>, <code>provider.openai.apiKey</code></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- 5. Gateways & Presets -->
+          <section class="docs-section" id="gateways">
+            <h2>🌐 Supported Gateways &amp; Presets</h2>
+            <p>
+              AI CLI Config Studio works with any provider that exposes an OpenAI-compliant <code>GET /models</code> endpoint. Built-in presets include:
+            </p>
+            <ul>
+              <li><strong>9Router:</strong> <code>https://api.9router.com/v1</code></li>
+              <li><strong>OpenRouter:</strong> <code>https://openrouter.ai/api/v1</code></li>
+              <li><strong>DeepSeek:</strong> <code>https://api.deepseek.com/v1</code></li>
+              <li><strong>Groq:</strong> <code>https://api.groq.com/openai/v1</code></li>
+              <li><strong>Together AI:</strong> <code>https://api.together.xyz/v1</code></li>
+            </ul>
+          </section>
+
+          <!-- 6. Privacy & Security -->
+          <section class="docs-section" id="privacy-security">
+            <h2>🛡️ Privacy &amp; Security Guarantees</h2>
+            <ul>
+              <li><strong>In-Memory Only:</strong> API keys are never stored on disk, never logged to terminal history on the server, and never sent to remote analytics.</li>
+              <li><strong>Zero Telemetry:</strong> No tracking cookies, external analytics, or remote logging.</li>
+              <li><strong>SSRF Hardening:</strong> Built-in server proxy blocks any requests targeting internal LANs, <code>localhost</code>, or loopback interfaces.</li>
+            </ul>
+          </section>
+
+          <!-- 7. Docker & Deployment -->
+          <section class="docs-section" id="docker-deployment">
+            <h2>🐳 Running Locally or with Docker</h2>
+
+            <h3>Local Bun Server</h3>
+            <pre class="docs-code-block"><code>bun install
+bun run dev</code></pre>
+
+            <h3>Docker Compose</h3>
+            <pre class="docs-code-block"><code>docker compose up -d</code></pre>
+
+            <h3>Run Directly from GitHub (No Clone Needed)</h3>
+            <pre class="docs-code-block"><code>docker compose -f docker-compose.git.yml up -d</code></pre>
+          </section>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <footer class="app-footer">
+        <span>AI CLI Config Studio Documentation</span>
+        <span><a href="/" style="color: var(--text-secondary); text-decoration: none;">&larr; Back to Studio</a></span>
+      </footer>
+    </main>
+  </body>
+</html>

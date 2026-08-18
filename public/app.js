@@ -1,192 +1,124 @@
+/**
+ * AI CLI Config Studio - Frontend Client Application
+ */
+
 import {
   configPaths,
   createSetupCommand,
   getRevertCommand,
 } from "./commands.js";
 
-const form = document.querySelector("#models-form");
-const baseUrlInput = document.querySelector("#base-url");
-const apiKeyInput = document.querySelector("#api-key");
-const toggleKeyButton = document.querySelector("#toggle-key");
-const loadButton = document.querySelector("#load-models");
-const loadLabel = document.querySelector("#load-label");
-const modelSelect = document.querySelector("#models");
-const modelStatus = document.querySelector("#model-status");
-const connectionStatus = document.querySelector("#connection-status");
-const commandElement = document.querySelector("#command");
-const copyCommandButton = document.querySelector("#copy-command");
-const terminalTitle = document.querySelector("#terminal-title");
-const readyState = document.querySelector("#ready-state");
-const summaryClient = document.querySelector("#summary-client");
-const summaryModel = document.querySelector("#summary-model");
-const summaryPlatform = document.querySelector("#summary-platform");
-const revertCopy = document.querySelector("#revert-copy");
-const revertHeaderTitle = document.querySelector("#revert-header-title");
-const revertHeaderDesc = document.querySelector("#revert-header-desc");
-const revertCommandElement = document.querySelector("#revert-command");
-const copyRevertButton = document.querySelector("#copy-revert");
-const copyRevertText = document.querySelector("#copy-revert-text");
-const securityBannerText = document.querySelector("#security-banner-text");
-const toast = document.querySelector("#toast");
-const toastMessage = toast ? toast.querySelector(".toast-message") : null;
+// ============================================================================
+// Constants & State
+// ============================================================================
 
-// Badges & Presets
-const step1Badge = document.querySelector("#step-1-badge");
-const step2Badge = document.querySelector("#step-2-badge");
-const modelCountHint = document.querySelector("#model-count-hint");
-const presetButtons = document.querySelectorAll(".preset-btn");
-
-let loadedFingerprint = "";
-let toastTimer;
-
-const clientLabels = {
+const CLIENT_LABELS = {
   claude: "Claude Code",
   codex: "Codex CLI",
   aider: "Aider",
   opencode: "OpenCode",
 };
 
-function selectedValue(name) {
+const state = {
+  loadedFingerprint: "",
+  toastTimer: null,
+};
+
+// ============================================================================
+// DOM Elements Registry
+// ============================================================================
+
+const elements = {
+  form: document.querySelector("#models-form"),
+  baseUrlInput: document.querySelector("#base-url"),
+  apiKeyInput: document.querySelector("#api-key"),
+  toggleKeyButton: document.querySelector("#toggle-key"),
+  loadButton: document.querySelector("#load-models"),
+  loadLabel: document.querySelector("#load-label"),
+  modelSelect: document.querySelector("#models"),
+  modelStatus: document.querySelector("#model-status"),
+  connectionStatus: document.querySelector("#connection-status"),
+  commandElement: document.querySelector("#command"),
+  copyCommandButton: document.querySelector("#copy-command"),
+  terminalTitle: document.querySelector("#terminal-title"),
+  readyState: document.querySelector("#ready-state"),
+  summaryClient: document.querySelector("#summary-client"),
+  summaryModel: document.querySelector("#summary-model"),
+  summaryPlatform: document.querySelector("#summary-platform"),
+  revertCopy: document.querySelector("#revert-copy"),
+  revertHeaderTitle: document.querySelector("#revert-header-title"),
+  revertHeaderDesc: document.querySelector("#revert-header-desc"),
+  revertCommandElement: document.querySelector("#revert-command"),
+  copyRevertButton: document.querySelector("#copy-revert"),
+  copyRevertText: document.querySelector("#copy-revert-text"),
+  securityBannerText: document.querySelector("#security-banner-text"),
+  toast: document.querySelector("#toast"),
+  toastMessage: document.querySelector("#toast .toast-message"),
+  step1Badge: document.querySelector("#step-1-badge"),
+  step2Badge: document.querySelector("#step-2-badge"),
+  modelCountHint: document.querySelector("#model-count-hint"),
+  presetButtons: document.querySelectorAll(".preset-btn"),
+};
+
+// ============================================================================
+// Helpers & Utilities
+// ============================================================================
+
+function getSelectedRadioValue(name) {
   const checked = document.querySelector(`input[name="${name}"]:checked`);
   return checked ? checked.value : "";
 }
 
-function credentialsFingerprint() {
-  return `${baseUrlInput.value.trim()}\n${apiKeyInput.value.trim()}`;
+function getCredentialsFingerprint() {
+  return `${elements.baseUrlInput.value.trim()}\n${elements.apiKeyInput.value.trim()}`;
 }
 
-function commandValues(apiKey = apiKeyInput.value.trim()) {
+function getCommandValues(apiKey = elements.apiKeyInput.value.trim()) {
   return {
-    baseUrl: baseUrlInput.value.trim(),
+    baseUrl: elements.baseUrlInput.value.trim(),
     apiKey,
-    model: modelSelect.value,
-    client: selectedValue("client"),
+    model: elements.modelSelect.value,
+    client: getSelectedRadioValue("client"),
   };
 }
 
-function currentCommand() {
-  if (!modelSelect.value) return "";
-  return createSetupCommand(selectedValue("platform"), commandValues());
+function getCurrentCommand() {
+  if (!elements.modelSelect.value) return "";
+  return createSetupCommand(getSelectedRadioValue("platform"), getCommandValues());
 }
 
-function previewCommand() {
-  if (!modelSelect.value) return "";
+function getPreviewCommand() {
+  if (!elements.modelSelect.value) return "";
   return createSetupCommand(
-    selectedValue("platform"),
-    commandValues("********"),
+    getSelectedRadioValue("platform"),
+    getCommandValues("********"),
   );
 }
 
-function setConnectionState(state, message) {
-  connectionStatus.dataset.state = state;
-  modelStatus.textContent = message;
+function setConnectionState(stateName, message) {
+  elements.connectionStatus.dataset.state = stateName;
+  elements.modelStatus.textContent = message;
 }
 
 function showToast(message) {
-  window.clearTimeout(toastTimer);
-  if (toastMessage) {
-    toastMessage.textContent = message;
-  } else if (toast) {
-    toast.textContent = message;
+  window.clearTimeout(state.toastTimer);
+  if (elements.toastMessage) {
+    elements.toastMessage.textContent = message;
   }
-  if (toast) {
-    toast.classList.add("is-visible");
-    toastTimer = window.setTimeout(() => {
-      toast.classList.remove("is-visible");
+  if (elements.toast) {
+    elements.toast.classList.add("is-visible");
+    state.toastTimer = window.setTimeout(() => {
+      elements.toast.classList.remove("is-visible");
     }, 2200);
   }
 }
 
-function updateOutput() {
-  const platform = selectedValue("platform") || "unix";
-  const client = selectedValue("client") || "claude";
-  const command = currentCommand();
-
-  terminalTitle.textContent = platform === "windows" ? "PowerShell" : "zsh";
-
-  const preview = previewCommand();
-  if (preview) {
-    commandElement.textContent = preview;
-  } else {
-    commandElement.textContent =
-      "# Step 1: Connect provider above and select a model.";
-  }
-
-  const isReady = Boolean(command);
-  copyCommandButton.disabled = !isReady;
-  readyState.classList.toggle("is-ready", isReady);
-
-  const badgeText = readyState.querySelector(".badge-text");
-  if (badgeText) {
-    badgeText.textContent = isReady ? "Ready" : "Waiting";
-  }
-
-  const name = clientLabels[client] || "Claude Code";
-  summaryClient.textContent = name;
-  summaryModel.textContent = modelSelect.value || "Not selected";
-  summaryPlatform.textContent =
-    platform === "windows" ? "Windows" : "macOS / Linux";
-
-  // Revert / Restore command
-  const revertCmd = getRevertCommand(platform, client);
-  if (revertCommandElement) {
-    revertCommandElement.textContent = revertCmd;
-  }
-
-  const pathInfo =
-    configPaths[client]?.[platform === "windows" ? "windows" : "unix"] || "";
-
-  if (revertCopy && revertHeaderTitle && revertHeaderDesc) {
-    revertHeaderTitle.textContent = `Restore Previous ${name} Config`;
-    revertHeaderDesc.textContent = "Revert to your newest backup";
-    revertCopy.innerHTML = `Run this command in your ${
-      platform === "windows" ? "PowerShell" : "terminal"
-    } to restore the previous backup of <code>${pathInfo}</code>.`;
-    if (copyRevertText) copyRevertText.textContent = "Copy Restore Command";
-  }
-
-  // Banner details
-  if (securityBannerText) {
-    securityBannerText.innerHTML = `<strong>Permanent Configuration:</strong> Creates a timestamped backup before writing settings to <code>${pathInfo}</code>. Persists across all terminal sessions.`;
-  }
-
-  // Step badges
-  const hasModels = modelSelect.options.length > 1 && !modelSelect.disabled;
-  if (hasModels) {
-    step1Badge.classList.add("completed");
-  } else {
-    step1Badge.classList.remove("completed");
-  }
-
-  if (modelSelect.value) {
-    step2Badge.classList.add("completed");
-  } else {
-    step2Badge.classList.remove("completed");
-  }
-}
-
-function invalidateModels() {
-  if (!loadedFingerprint || loadedFingerprint === credentialsFingerprint()) {
-    updateOutput();
-    return;
-  }
-
-  loadedFingerprint = "";
-  modelSelect.replaceChildren(
-    new Option("Credentials changed — fetch models to reload", "")
-  );
-  modelSelect.disabled = true;
-  if (modelCountHint) modelCountHint.textContent = "Connect provider first";
-  setConnectionState("idle", "Credentials changed. Fetch models to update.");
-  updateOutput();
-}
-
-async function writeClipboard(value) {
+async function writeClipboard(text) {
   try {
-    await navigator.clipboard.writeText(value);
+    await navigator.clipboard.writeText(text);
   } catch {
     const helper = document.createElement("textarea");
-    helper.value = value;
+    helper.value = text;
     helper.style.position = "fixed";
     helper.style.opacity = "0";
     document.body.append(helper);
@@ -196,36 +128,95 @@ async function writeClipboard(value) {
   }
 }
 
-// Preset button handlers
-presetButtons.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    presetButtons.forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    const targetUrl = btn.dataset.url;
-    if (targetUrl) {
-      baseUrlInput.value = targetUrl;
-      invalidateModels();
-      if (!apiKeyInput.value) {
-        apiKeyInput.focus();
-      }
+// ============================================================================
+// UI Renderers & Updaters
+// ============================================================================
+
+function updateOutput() {
+  const platform = getSelectedRadioValue("platform") || "unix";
+  const client = getSelectedRadioValue("client") || "claude";
+  const command = getCurrentCommand();
+
+  elements.terminalTitle.textContent = platform === "windows" ? "PowerShell" : "zsh";
+
+  const preview = getPreviewCommand();
+  elements.commandElement.textContent = preview
+    ? preview
+    : "# Step 1: Connect provider above and select a model.";
+
+  const isReady = Boolean(command);
+  elements.copyCommandButton.disabled = !isReady;
+  elements.readyState.classList.toggle("is-ready", isReady);
+
+  const badgeText = elements.readyState.querySelector(".badge-text");
+  if (badgeText) {
+    badgeText.textContent = isReady ? "Ready" : "Waiting";
+  }
+
+  const clientName = CLIENT_LABELS[client] || "Claude Code";
+  elements.summaryClient.textContent = clientName;
+  elements.summaryModel.textContent = elements.modelSelect.value || "Not selected";
+  elements.summaryPlatform.textContent =
+    platform === "windows" ? "Windows" : "macOS / Linux";
+
+  // Revert / Restore command
+  const revertCmd = getRevertCommand(platform, client);
+  if (elements.revertCommandElement) {
+    elements.revertCommandElement.textContent = revertCmd;
+  }
+
+  const pathInfo =
+    configPaths[client]?.[platform === "windows" ? "windows" : "unix"] || "";
+
+  if (elements.revertCopy && elements.revertHeaderTitle && elements.revertHeaderDesc) {
+    elements.revertHeaderTitle.textContent = `Restore Previous ${clientName} Config`;
+    elements.revertHeaderDesc.textContent = "Revert to your newest backup";
+    elements.revertCopy.innerHTML = `Run this command in your ${
+      platform === "windows" ? "PowerShell" : "terminal"
+    } to restore the previous backup of <code>${pathInfo}</code>.`;
+    if (elements.copyRevertText) {
+      elements.copyRevertText.textContent = "Copy Restore Command";
     }
-  });
-});
+  }
 
-// Update preset highlight on input change
-baseUrlInput.addEventListener("input", () => {
-  const currentVal = baseUrlInput.value.trim();
-  presetButtons.forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.url === currentVal);
-  });
-  invalidateModels();
-});
+  // Security banner details
+  if (elements.securityBannerText) {
+    elements.securityBannerText.innerHTML = `<strong>Permanent Configuration:</strong> Creates a timestamped backup before writing settings to <code>${pathInfo}</code>. Persists across all terminal sessions.`;
+  }
 
-form.addEventListener("submit", async (event) => {
+  // Step badges
+  const hasModels = elements.modelSelect.options.length > 1 && !elements.modelSelect.disabled;
+  elements.step1Badge.classList.toggle("completed", hasModels);
+  elements.step2Badge.classList.toggle("completed", Boolean(elements.modelSelect.value));
+}
+
+function invalidateModels() {
+  if (!state.loadedFingerprint || state.loadedFingerprint === getCredentialsFingerprint()) {
+    updateOutput();
+    return;
+  }
+
+  state.loadedFingerprint = "";
+  elements.modelSelect.replaceChildren(
+    new Option("Credentials changed — fetch models to reload", "")
+  );
+  elements.modelSelect.disabled = true;
+  if (elements.modelCountHint) {
+    elements.modelCountHint.textContent = "Connect provider first";
+  }
+  setConnectionState("idle", "Credentials changed. Fetch models to update.");
+  updateOutput();
+}
+
+// ============================================================================
+// Event Handlers
+// ============================================================================
+
+async function handleFetchModels(event) {
   event.preventDefault();
-  loadButton.disabled = true;
-  loadButton.classList.add("is-loading");
-  loadLabel.textContent = "Fetching...";
+  elements.loadButton.disabled = true;
+  elements.loadButton.classList.add("is-loading");
+  elements.loadLabel.textContent = "Fetching...";
   setConnectionState("loading", "Querying provider models...");
 
   try {
@@ -233,8 +224,8 @@ form.addEventListener("submit", async (event) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        baseUrl: baseUrlInput.value,
-        apiKey: apiKeyInput.value,
+        baseUrl: elements.baseUrlInput.value,
+        apiKey: elements.apiKeyInput.value,
       }),
     });
     const payload = await response.json();
@@ -247,65 +238,64 @@ form.addEventListener("submit", async (event) => {
       throw new Error("The gateway returned no models.");
     }
 
-    modelSelect.replaceChildren(
+    elements.modelSelect.replaceChildren(
       ...payload.models.map((model) => new Option(model, model)),
     );
-    modelSelect.disabled = false;
-    loadedFingerprint = credentialsFingerprint();
-    if (modelCountHint) {
-      modelCountHint.textContent = `${payload.models.length} models available`;
+    elements.modelSelect.disabled = false;
+    state.loadedFingerprint = getCredentialsFingerprint();
+
+    if (elements.modelCountHint) {
+      elements.modelCountHint.textContent = `${payload.models.length} models available`;
     }
     setConnectionState("success", `${payload.models.length} models loaded successfully.`);
     showToast(`${payload.models.length} models loaded`);
   } catch (error) {
-    loadedFingerprint = "";
-    modelSelect.replaceChildren(
+    state.loadedFingerprint = "";
+    elements.modelSelect.replaceChildren(
       new Option("No models available. Check URL & key.", "")
     );
-    modelSelect.disabled = true;
-    if (modelCountHint) modelCountHint.textContent = "Failed to load";
+    elements.modelSelect.disabled = true;
+
+    if (elements.modelCountHint) {
+      elements.modelCountHint.textContent = "Failed to load";
+    }
     setConnectionState(
       "error",
       error instanceof Error ? error.message : "Could not load models.",
     );
   } finally {
-    loadButton.disabled = false;
-    loadButton.classList.remove("is-loading");
-    loadLabel.textContent = "Fetch Models";
+    elements.loadButton.disabled = false;
+    elements.loadButton.classList.remove("is-loading");
+    elements.loadLabel.textContent = "Fetch Models";
     updateOutput();
   }
-});
+}
 
-toggleKeyButton.addEventListener("click", () => {
-  const show = apiKeyInput.type === "password";
-  apiKeyInput.type = show ? "text" : "password";
-  const eyeIcon = toggleKeyButton.querySelector(".icon-eye");
-  const eyeOffIcon = toggleKeyButton.querySelector(".icon-eye-off");
-  const toggleText = toggleKeyButton.querySelector(".toggle-text");
+function handleTogglePassword() {
+  const isPassword = elements.apiKeyInput.type === "password";
+  elements.apiKeyInput.type = isPassword ? "text" : "password";
+
+  const eyeIcon = elements.toggleKeyButton.querySelector(".icon-eye");
+  const eyeOffIcon = elements.toggleKeyButton.querySelector(".icon-eye-off");
+  const toggleText = elements.toggleKeyButton.querySelector(".toggle-text");
+
   if (eyeIcon && eyeOffIcon) {
-    eyeIcon.classList.toggle("hidden", show);
-    eyeOffIcon.classList.toggle("hidden", !show);
+    eyeIcon.classList.toggle("hidden", isPassword);
+    eyeOffIcon.classList.toggle("hidden", !isPassword);
   }
   if (toggleText) {
-    toggleText.textContent = show ? "Hide" : "Show";
+    toggleText.textContent = isPassword ? "Hide" : "Show";
   }
-});
+}
 
-document
-  .querySelectorAll('input[name="client"], input[name="platform"]')
-  .forEach((input) => input.addEventListener("change", updateOutput));
-
-modelSelect.addEventListener("change", updateOutput);
-apiKeyInput.addEventListener("input", invalidateModels);
-
-copyCommandButton.addEventListener("click", async () => {
-  const command = currentCommand();
+async function handleCopyCommand() {
+  const command = getCurrentCommand();
   if (!command) return;
   await writeClipboard(command);
 
-  const copyIcon = copyCommandButton.querySelector(".icon-copy");
-  const checkIcon = copyCommandButton.querySelector(".icon-check");
-  const copyBtnText = copyCommandButton.querySelector(".copy-btn-text");
+  const copyIcon = elements.copyCommandButton.querySelector(".icon-copy");
+  const checkIcon = elements.copyCommandButton.querySelector(".icon-check");
+  const copyBtnText = elements.copyCommandButton.querySelector(".copy-btn-text");
 
   if (copyIcon && checkIcon) {
     copyIcon.classList.add("hidden");
@@ -322,16 +312,19 @@ copyCommandButton.addEventListener("click", async () => {
   }, 1800);
 
   showToast("Setup command copied to clipboard");
-});
+}
 
-copyRevertButton.addEventListener("click", async () => {
-  const revertCmd = getRevertCommand(selectedValue("platform"), selectedValue("client"));
+async function handleCopyRevert() {
+  const revertCmd = getRevertCommand(
+    getSelectedRadioValue("platform"),
+    getSelectedRadioValue("client"),
+  );
   if (!revertCmd) return;
   await writeClipboard(revertCmd);
 
-  const copyIcon = copyRevertButton.querySelector(".icon-copy");
-  const checkIcon = copyRevertButton.querySelector(".icon-check");
-  const btnText = copyRevertButton.querySelector(".secondary-btn-text");
+  const copyIcon = elements.copyRevertButton.querySelector(".icon-copy");
+  const checkIcon = elements.copyRevertButton.querySelector(".icon-check");
+  const btnText = elements.copyRevertButton.querySelector(".secondary-btn-text");
 
   if (copyIcon && checkIcon) {
     copyIcon.classList.add("hidden");
@@ -345,12 +338,66 @@ copyRevertButton.addEventListener("click", async () => {
       checkIcon.classList.add("hidden");
     }
     if (btnText) {
-      btnText.textContent = copyRevertText ? copyRevertText.textContent : "Copy Restore Command";
+      btnText.textContent = elements.copyRevertText
+        ? elements.copyRevertText.textContent
+        : "Copy Restore Command";
     }
   }, 1800);
 
   showToast("Restore command copied");
-});
+}
 
-// Initial update
-updateOutput();
+// ============================================================================
+// Initialization
+// ============================================================================
+
+function init() {
+  // Preset buttons
+  elements.presetButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      elements.presetButtons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      const targetUrl = btn.dataset.url;
+      if (targetUrl) {
+        elements.baseUrlInput.value = targetUrl;
+        invalidateModels();
+        if (!elements.apiKeyInput.value) {
+          elements.apiKeyInput.focus();
+        }
+      }
+    });
+  });
+
+  // Base URL input
+  elements.baseUrlInput.addEventListener("input", () => {
+    const currentVal = elements.baseUrlInput.value.trim();
+    elements.presetButtons.forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.url === currentVal);
+    });
+    invalidateModels();
+  });
+
+  // Form submission
+  elements.form.addEventListener("submit", handleFetchModels);
+
+  // Toggle API key visibility
+  elements.toggleKeyButton.addEventListener("click", handleTogglePassword);
+
+  // Radio card options and select changes
+  document
+    .querySelectorAll('input[name="client"], input[name="platform"]')
+    .forEach((input) => input.addEventListener("change", updateOutput));
+
+  elements.modelSelect.addEventListener("change", updateOutput);
+  elements.apiKeyInput.addEventListener("input", invalidateModels);
+
+  // Copy buttons
+  elements.copyCommandButton.addEventListener("click", handleCopyCommand);
+  elements.copyRevertButton.addEventListener("click", handleCopyRevert);
+
+  // Initial render
+  updateOutput();
+}
+
+// Run initialization
+init();
