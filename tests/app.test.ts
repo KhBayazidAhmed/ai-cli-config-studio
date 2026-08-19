@@ -29,7 +29,7 @@ async function createTemporaryHome() {
 }
 
 async function runUnixCommand(command: string, home: string, path = Bun.env.PATH) {
-  const process = Bun.spawn(["/bin/zsh", "-c", command], {
+  const process = Bun.spawn(["/bin/sh", "-c", command], {
     env: { ...Bun.env, HOME: home, PATH: path },
     stdout: "pipe",
     stderr: "pipe",
