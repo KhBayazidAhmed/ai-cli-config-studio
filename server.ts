@@ -3,7 +3,27 @@
  * Handles model discovery requests and serves static frontend assets.
  */
 
+import { lookup as dnsLookup } from "node:dns/promises";
+import { isIP } from "node:net";
+
 const PORT = Number(Bun.env.PORT ?? 3000);
+const MAX_REDIRECTS = 5;
+
+type LookupAddress = { address: string; family: number };
+type LookupGateway = (
+  hostname: string,
+  options: { all: true; verbatim: true },
+) => Promise<LookupAddress[]>;
+
+export type GatewayDependencies = {
+  fetch: typeof fetch;
+  lookup: LookupGateway;
+};
+
+const defaultDependencies: GatewayDependencies = {
+  fetch: (...args) => globalThis.fetch(...args),
+  lookup: dnsLookup as LookupGateway,
+};
 
 /**
  * Standard JSON response helper with no-store cache control.
@@ -23,24 +43,21 @@ export function sanitizeGatewayUrl(input: string): URL {
   const normalized = input.match(/^https?:\/\//i) ? input : `https://${input}`;
   const url = new URL(normalized);
 
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Only HTTP and HTTPS gateway URLs are supported.");
+  if (url.protocol !== "https:") {
+    throw new Error("Only HTTPS gateway URLs are supported.");
   }
 
-  const host = url.hostname.toLowerCase();
-  const isPrivateOrLocal =
+  if (url.username || url.password) {
+    throw new Error("Gateway URLs must not contain embedded credentials.");
+  }
+
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const isNamedLocalHost =
     host === "localhost" ||
     host.endsWith(".localhost") ||
-    host.endsWith(".local") ||
-    host === "0.0.0.0" ||
-    host === "::1" ||
-    host.startsWith("127.") ||
-    host.startsWith("10.") ||
-    host.startsWith("192.168.") ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
-    host.startsWith("169.254.");
+    host.endsWith(".local");
 
-  if (isPrivateOrLocal) {
+  if (isNamedLocalHost || (isIP(host) && isNonPublicAddress(host))) {
     throw new Error("Local and private network gateway URLs are not allowed.");
   }
 
@@ -54,11 +71,161 @@ export function sanitizeGatewayUrl(input: string): URL {
   return url;
 }
 
+function isNonPublicIpv4(address: string): boolean {
+  const octets = address.split(".").map(Number);
+  if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return true;
+  }
+
+  const [a, b, c] = octets;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 0 && c === 0) ||
+    (a === 192 && b === 0 && c === 2) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    (a === 198 && b === 51 && c === 100) ||
+    (a === 203 && b === 0 && c === 113) ||
+    a >= 224
+  );
+}
+
+function ipv6ToBigInt(address: string): bigint | null {
+  const normalized = address.toLowerCase().split("%")[0];
+  const halves = normalized.split("::");
+  if (halves.length > 2) return null;
+
+  const parseHalf = (half: string): number[] | null => {
+    if (!half) return [];
+    const output: number[] = [];
+    for (const part of half.split(":")) {
+      if (part.includes(".")) {
+        const octets = part.split(".").map(Number);
+        if (octets.length !== 4 || octets.some((value) => value < 0 || value > 255)) return null;
+        output.push((octets[0] << 8) | octets[1], (octets[2] << 8) | octets[3]);
+        continue;
+      }
+      if (!/^[0-9a-f]{1,4}$/.test(part)) return null;
+      output.push(Number.parseInt(part, 16));
+    }
+    return output;
+  };
+
+  const left = parseHalf(halves[0]);
+  const right = parseHalf(halves[1] ?? "");
+  if (!left || !right) return null;
+
+  const missing = 8 - left.length - right.length;
+  if ((halves.length === 1 && missing !== 0) || missing < 0) return null;
+  const groups = halves.length === 2 ? [...left, ...Array(missing).fill(0), ...right] : left;
+  if (groups.length !== 8) return null;
+
+  return groups.reduce((value, group) => (value << 16n) | BigInt(group), 0n);
+}
+
+function isInIpv6Range(value: bigint, base: bigint, prefix: number): boolean {
+  const shift = BigInt(128 - prefix);
+  return value >> shift === base >> shift;
+}
+
+function isNonPublicIpv6(address: string): boolean {
+  const value = ipv6ToBigInt(address);
+  if (value === null) return true;
+
+  if (value === 0n || value === 1n) return true;
+  if (isInIpv6Range(value, 0xfc00n << 112n, 7)) return true;
+  if (isInIpv6Range(value, 0xfe80n << 112n, 10)) return true;
+  if (isInIpv6Range(value, 0xff00n << 112n, 8)) return true;
+  if (isInIpv6Range(value, 0x20010db8n << 96n, 32)) return true;
+
+  // IPv4-compatible and IPv4-mapped IPv6 addresses inherit IPv4 restrictions.
+  const prefix96 = value >> 32n;
+  if (prefix96 === 0n || prefix96 === 0xffffn) {
+    const ipv4 = Number(value & 0xffffffffn);
+    return isNonPublicIpv4(
+      `${(ipv4 >>> 24) & 255}.${(ipv4 >>> 16) & 255}.${(ipv4 >>> 8) & 255}.${ipv4 & 255}`,
+    );
+  }
+
+  return false;
+}
+
+export function isNonPublicAddress(address: string): boolean {
+  const version = isIP(address);
+  if (version === 4) return isNonPublicIpv4(address);
+  if (version === 6) return isNonPublicIpv6(address);
+  return true;
+}
+
+async function assertPublicGatewayTarget(url: URL, lookup: LookupGateway): Promise<void> {
+  const hostname = url.hostname.replace(/^\[|\]$/g, "");
+  if (isIP(hostname)) {
+    if (isNonPublicAddress(hostname)) {
+      throw new Error("Local and private network gateway URLs are not allowed.");
+    }
+    return;
+  }
+
+  let addresses: LookupAddress[];
+  try {
+    addresses = await lookup(hostname, { all: true, verbatim: true });
+  } catch {
+    throw new Error("Gateway hostname could not be resolved.");
+  }
+
+  if (!addresses.length || addresses.some(({ address }) => isNonPublicAddress(address))) {
+    throw new Error("Gateway hostname resolves to a local or private network address.");
+  }
+}
+
+async function fetchGateway(
+  initialUrl: URL,
+  headers: Headers,
+  dependencies: GatewayDependencies,
+): Promise<Response> {
+  let currentUrl = initialUrl;
+
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+    await assertPublicGatewayTarget(currentUrl, dependencies.lookup);
+    const response = await dependencies.fetch(currentUrl, {
+      headers,
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (response.status < 300 || response.status >= 400) return response;
+
+    const location = response.headers.get("location");
+    if (!location) return response;
+    if (redirectCount === MAX_REDIRECTS) throw new Error("Gateway redirected too many times.");
+
+    const nextUrl = new URL(location, currentUrl);
+    if (nextUrl.protocol !== "https:") {
+      throw new Error("Gateway redirected to an insecure URL protocol.");
+    }
+    if (nextUrl.origin !== currentUrl.origin) {
+      throw new Error("Cross-origin gateway redirects are not allowed.");
+    }
+    nextUrl.hash = "";
+    currentUrl = nextUrl;
+  }
+
+  throw new Error("Gateway redirected too many times.");
+}
+
 /**
  * Handles POST /api/models to discover models from an OpenAI-compatible gateway.
  */
-async function handleModelsDiscovery(request: Request): Promise<Response> {
-  let body: { baseUrl?: string; apiKey?: string };
+async function handleModelsDiscovery(
+  request: Request,
+  dependencies: GatewayDependencies,
+): Promise<Response> {
+  let body: unknown;
 
   try {
     body = await request.json();
@@ -66,7 +233,12 @@ async function handleModelsDiscovery(request: Request): Promise<Response> {
     return jsonResponse({ error: "Invalid JSON request body." }, 400);
   }
 
-  const rawBaseUrl = body.baseUrl?.trim();
+  if (!body || typeof body !== "object") {
+    return jsonResponse({ error: "Invalid JSON request body." }, 400);
+  }
+
+  const { baseUrl, apiKey } = body as { baseUrl?: unknown; apiKey?: unknown };
+  const rawBaseUrl = typeof baseUrl === "string" ? baseUrl.trim() : "";
   if (!rawBaseUrl) {
     return jsonResponse({ error: "Base URL is required." }, 400);
   }
@@ -80,16 +252,13 @@ async function handleModelsDiscovery(request: Request): Promise<Response> {
   }
 
   const headers = new Headers({ Accept: "application/json" });
-  const rawApiKey = body.apiKey?.trim();
+  const rawApiKey = typeof apiKey === "string" ? apiKey.trim() : "";
   if (rawApiKey) {
     headers.set("Authorization", `Bearer ${rawApiKey}`);
   }
 
   try {
-    const response = await fetch(modelsUrl, {
-      headers,
-      signal: AbortSignal.timeout(15_000),
-    });
+    const response = await fetchGateway(modelsUrl, headers, dependencies);
 
     if (!response.ok) {
       const responseText = await response.text().catch(() => "");
@@ -117,14 +286,15 @@ async function handleModelsDiscovery(request: Request): Promise<Response> {
       );
     }
 
-    const payload = (await response.json()) as {
-      data?: Array<{ id?: string }>;
-    };
+    const payload = (await response.json()) as { data?: unknown };
+    const data = Array.isArray(payload?.data) ? payload.data : [];
 
     const discovered = [
       ...new Set(
-        (payload.data ?? [])
-          .map((item) => item.id)
+        data
+          .map((item) => (item && typeof item === "object" ? (item as { id?: unknown }).id : undefined))
+          .filter((id): id is string => typeof id === "string")
+          .map((id) => id.trim())
           .filter((id): id is string => Boolean(id)),
       ),
     ].sort();
@@ -147,7 +317,6 @@ const staticFiles: Record<string, string> = {
   "/": "public/index.html",
   "/index.html": "public/index.html",
   "/docs": "public/docs.html",
-  "/dpcs": "public/docs.html",
   "/docs.html": "public/docs.html",
   "/app.js": "public/app.js",
   "/commands.js": "public/commands.js",
@@ -157,19 +326,27 @@ const staticFiles: Record<string, string> = {
 /**
  * Main HTTP request router.
  */
-export async function handleRequest(request: Request): Promise<Response> {
-  const url = new URL(request.url);
+export function createRequestHandler(
+  overrides: Partial<GatewayDependencies> = {},
+): (request: Request) => Promise<Response> {
+  const dependencies = { ...defaultDependencies, ...overrides };
 
-  if (request.method === "POST" && url.pathname === "/api/models") {
-    return handleModelsDiscovery(request);
-  }
+  return async function requestHandler(request: Request): Promise<Response> {
+    const url = new URL(request.url);
 
-  if (request.method === "GET" && staticFiles[url.pathname]) {
-    return new Response(Bun.file(staticFiles[url.pathname]));
-  }
+    if (request.method === "POST" && url.pathname === "/api/models") {
+      return handleModelsDiscovery(request, dependencies);
+    }
 
-  return new Response("Not found", { status: 404 });
+    if (request.method === "GET" && staticFiles[url.pathname]) {
+      return new Response(Bun.file(staticFiles[url.pathname]));
+    }
+
+    return new Response("Not found", { status: 404 });
+  };
 }
+
+export const handleRequest = createRequestHandler();
 
 // Start server when executed directly
 if (import.meta.main) {

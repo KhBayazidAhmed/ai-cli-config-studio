@@ -1,228 +1,278 @@
-import { afterAll, describe, expect, test } from "bun:test";
-import {
-  configPaths,
-  createSetupCommand,
-  getRevertCommand,
-} from "../public/commands.js";
-import { handleRequest } from "../server";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, readdir, rm, writeFile, mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { configPaths, createSetupCommand, getRevertCommand } from "../public/commands.js";
+import { createRequestHandler, isNonPublicAddress, sanitizeGatewayUrl } from "../server";
 
-const originalFetch = globalThis.fetch;
+const temporaryHomes: string[] = [];
+const publicLookup = async () => [{ address: "93.184.216.34", family: 4 }];
 
-afterAll(() => {
-  globalThis.fetch = originalFetch;
+afterEach(async () => {
+  await Promise.all(temporaryHomes.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
-describe("model discovery", () => {
-  test("returns sorted, unique model names", async () => {
-    globalThis.fetch = (() =>
-      Promise.resolve(
-        Response.json({
-          data: [{ id: "z-model" }, { id: "a-model" }, { id: "a-model" }],
-        }),
-      )) as typeof fetch;
+async function createTemporaryHome() {
+  const path = await mkdtemp(join(tmpdir(), "config-studio-test-"));
+  temporaryHomes.push(path);
+  return path;
+}
 
-    const response = await handleRequest(
-      new Request("http://local/api/models", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          baseUrl: "https://api.9router.com/v1",
-          apiKey: "test-key",
-        }),
-      }),
+async function runUnixCommand(command: string, home: string) {
+  const process = Bun.spawn(["zsh", "-c", command], {
+    env: { ...Bun.env, HOME: home },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exitCode, stderr] = await Promise.all([
+    process.exited,
+    new Response(process.stderr).text(),
+  ]);
+  expect(stderr).toBe("");
+  expect(exitCode).toBe(0);
+}
+
+async function writeHomeFile(home: string, relativePath: string, contents: string) {
+  const target = join(home, relativePath);
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, contents);
+  return target;
+}
+
+describe("gateway validation and model discovery", () => {
+  test("normalizes model URLs and classifies private IP ranges", () => {
+    expect(sanitizeGatewayUrl("gateway.example.com/v1").href).toBe("https://gateway.example.com/v1/models");
+    expect(isNonPublicAddress("127.0.0.1")).toBe(true);
+    expect(isNonPublicAddress("10.2.3.4")).toBe(true);
+    expect(isNonPublicAddress("169.254.1.1")).toBe(true);
+    expect(isNonPublicAddress("::1")).toBe(true);
+    expect(isNonPublicAddress("fc00::1")).toBe(true);
+    expect(isNonPublicAddress("fe80::1")).toBe(true);
+    expect(isNonPublicAddress("93.184.216.34")).toBe(false);
+    expect(isNonPublicAddress("2606:4700:4700::1111")).toBe(false);
+    expect(() => sanitizeGatewayUrl("http://gateway.example.com/v1")).toThrow(
+      "Only HTTPS gateway URLs are supported.",
     );
+    expect(() => sanitizeGatewayUrl("https://user:pass@gateway.example.com/v1")).toThrow(
+      "Gateway URLs must not contain embedded credentials.",
+    );
+  });
+
+  test("forwards authorization and returns sorted unique model names", async () => {
+    let requestedUrl = "";
+    let authorization = "";
+    const handler = createRequestHandler({
+      lookup: publicLookup,
+      fetch: (async (input, init) => {
+        requestedUrl = String(input);
+        authorization = new Headers(init?.headers).get("authorization") ?? "";
+        return Response.json({
+          data: [{ id: "z-model" }, { id: "a-model" }, { id: "a-model" }, { id: " " }],
+        });
+      }) as typeof fetch,
+    });
+
+    const response = await handler(new Request("http://local/api/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl: "https://gateway.example.com/v1", apiKey: "test-key" }),
+    }));
 
     expect(response.status).toBe(200);
+    expect(requestedUrl).toBe("https://gateway.example.com/v1/models");
+    expect(authorization).toBe("Bearer test-key");
     expect(await response.json()).toEqual({ models: ["a-model", "z-model"] });
   });
 
-  test("accepts any public compatible gateway", async () => {
-    const response = await handleRequest(
-      new Request("http://local/api/models", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          baseUrl: "https://gateway.example.com/v1",
-          apiKey: "test-key",
-        }),
-      }),
-    );
+  test("blocks hostnames that resolve privately before fetch", async () => {
+    let fetched = false;
+    const handler = createRequestHandler({
+      lookup: async () => [{ address: "192.168.1.20", family: 4 }],
+      fetch: (async () => {
+        fetched = true;
+        return Response.json({ data: [{ id: "unexpected" }] });
+      }) as typeof fetch,
+    });
 
-    expect(response.status).toBe(200);
-  });
+    const response = await handler(new Request("http://local/api/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl: "https://internal.example/v1", apiKey: "test" }),
+    }));
 
-  test("rejects local and private gateway URLs", async () => {
-    const response = await handleRequest(
-      new Request("http://local/api/models", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          baseUrl: "http://127.0.0.1:8080/v1",
-          apiKey: "test-key",
-        }),
-      }),
-    );
-
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(502);
+    expect(fetched).toBe(false);
     expect(await response.json()).toEqual({
-      error: "Local and private network gateway URLs are not allowed.",
+      error: "Gateway hostname resolves to a local or private network address.",
     });
   });
+
+  test("rejects direct private URLs and cross-origin redirects", async () => {
+    const handler = createRequestHandler({
+      lookup: publicLookup,
+      fetch: (async () => new Response(null, {
+        status: 302,
+        headers: { Location: "https://other.example/models" },
+      })) as typeof fetch,
+    });
+
+    const privateResponse = await handler(new Request("http://local/api/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl: "http://127.0.0.1:8080/v1", apiKey: "test" }),
+    }));
+    expect(privateResponse.status).toBe(400);
+
+    const redirectResponse = await handler(new Request("http://local/api/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl: "https://gateway.example/v1", apiKey: "test" }),
+    }));
+    expect(redirectResponse.status).toBe(502);
+    expect(await redirectResponse.json()).toEqual({
+      error: "Cross-origin gateway redirects are not allowed.",
+    });
+  });
+
+  test("follows validated same-origin redirects and handles malformed payloads", async () => {
+    const requested: string[] = [];
+    const handler = createRequestHandler({
+      lookup: publicLookup,
+      fetch: (async (input) => {
+        requested.push(String(input));
+        if (requested.length === 1) {
+          return new Response(null, { status: 307, headers: { Location: "/v2/models" } });
+        }
+        return Response.json({ data: [{ id: "redirected-model" }] });
+      }) as typeof fetch,
+    });
+
+    const response = await handler(new Request("http://local/api/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl: "https://gateway.example/v1", apiKey: "test" }),
+    }));
+    expect(response.status).toBe(200);
+    expect(requested).toEqual([
+      "https://gateway.example/v1/models",
+      "https://gateway.example/v2/models",
+    ]);
+    expect(await response.json()).toEqual({ models: ["redirected-model"] });
+
+    const malformedHandler = createRequestHandler({
+      lookup: publicLookup,
+      fetch: (async () => Response.json({ data: { id: "not-an-array" } })) as typeof fetch,
+    });
+    const malformed = await malformedHandler(new Request("http://local/api/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ baseUrl: "https://gateway.example/v1" }),
+    }));
+    expect(malformed.status).toBe(502);
+    expect(await malformed.json()).toEqual({ error: "The gateway returned no models." });
+  });
 });
 
-describe("permanent configuration for Claude Code", () => {
-  const values = {
-    baseUrl: "https://9router.eminai.cloud/v1",
-    apiKey: "sk-ant-test",
-    model: "claude-3-7-sonnet",
-    client: "claude",
+describe("executable permanent configuration commands", () => {
+  const hostileValues = {
+    baseUrl: "https://gateway.example/v1?quote='&line=one\ntwo",
+    apiKey: "key'\nEOF\n$(touch should-not-run)",
+    model: "model'; touch injected-marker; #",
   };
 
-  test("generates permanent backup & settings.json merge on macOS/Linux", () => {
-    const command = createSetupCommand("unix", values);
+  test("Claude command preserves settings, creates a backup, and safely handles hostile values", async () => {
+    const home = await createTemporaryHome();
+    const target = await writeHomeFile(home, ".claude/settings.json", JSON.stringify({
+      theme: "dark",
+      env: { KEEP: "yes" },
+    }));
 
-    expect(command).toContain('mkdir -p "$HOME/.claude"');
-    expect(command).toContain("settings.json.bak-$(date");
-    expect(command).toContain("node -e");
-    expect(command).toContain('ANTHROPIC_BASE_URL: "https://9router.eminai.cloud/v1"');
-    expect(command).toContain('ANTHROPIC_AUTH_TOKEN: "sk-ant-test"');
-    expect(command).toContain('ANTHROPIC_MODEL: "claude-3-7-sonnet"');
+    await runUnixCommand(createSetupCommand("unix", { ...hostileValues, client: "claude" }), home);
 
-    const revert = getRevertCommand("unix", "claude");
-    expect(revert).toContain("settings.json.bak-*");
-    expect(revert).toContain('cp "$latest" "$HOME/.claude/settings.json"');
+    const config = JSON.parse(await readFile(target, "utf8"));
+    expect(config.theme).toBe("dark");
+    expect(config.env).toEqual({
+      KEEP: "yes",
+      ANTHROPIC_BASE_URL: hostileValues.baseUrl,
+      ANTHROPIC_AUTH_TOKEN: hostileValues.apiKey,
+      ANTHROPIC_MODEL: hostileValues.model,
+    });
+    expect(await readdir(join(home, ".claude"))).toContainEqual(
+      expect.stringMatching(/^settings\.json\.bak-\d{8}-\d{6}$/),
+    );
+    expect(await Bun.file(join(home, "injected-marker")).exists()).toBe(false);
   });
 
-  test("generates permanent backup & settings.json merge on Windows", () => {
-    const command = createSetupCommand("windows", values);
+  test("Codex command and restore command round-trip an existing config", async () => {
+    const home = await createTemporaryHome();
+    const original = { approvalMode: "manual", model: "old-model" };
+    const target = await writeHomeFile(home, ".config/codex/config.json", JSON.stringify(original));
 
-    expect(command).toContain("Join-Path $HOME '.claude'");
-    expect(command).toContain('"$config.bak-$(Get-Date');
-    expect(command).toContain("Set-Content -Path $config -Encoding UTF8");
-    expect(command).toContain("ANTHROPIC_BASE_URL");
-    expect(command).toContain("https://9router.eminai.cloud/v1");
+    await runUnixCommand(createSetupCommand("unix", { ...hostileValues, client: "codex" }), home);
+    const updated = JSON.parse(await readFile(target, "utf8"));
+    expect(updated.approvalMode).toBe("manual");
+    expect(updated.model).toBe(hostileValues.model);
 
-    const revert = getRevertCommand("windows", "claude");
-    expect(revert).toContain('"$config.bak-*"');
-    expect(revert).toContain("Copy-Item $latest.FullName $config -Force");
-  });
-});
-
-describe("permanent configuration for Codex CLI", () => {
-  const values = {
-    baseUrl: "https://api.openai.com/v1",
-    apiKey: "sk-openai-test",
-    model: "gpt-4o",
-    client: "codex",
-  };
-
-  test("generates permanent backup & config.json merge on macOS/Linux", () => {
-    const command = createSetupCommand("unix", values);
-
-    expect(command).toContain('mkdir -p "$HOME/.config/codex"');
-    expect(command).toContain("config.json.bak-$(date");
-    expect(command).toContain("node -e");
-    expect(command).toContain('baseUrl: "https://api.openai.com/v1"');
-    expect(command).toContain('apiKey: "sk-openai-test"');
-    expect(command).toContain('model: "gpt-4o"');
-
-    const revert = getRevertCommand("unix", "codex");
-    expect(revert).toContain("config.json.bak-*");
+    await runUnixCommand(getRevertCommand("unix", "codex"), home);
+    expect(JSON.parse(await readFile(target, "utf8"))).toEqual(original);
   });
 
-  test("generates permanent backup & config.json merge on Windows", () => {
-    const command = createSetupCommand("windows", values);
+  test("Aider command preserves unrelated YAML and quotes unsafe values", async () => {
+    const home = await createTemporaryHome();
+    const target = await writeHomeFile(home, ".aider.conf.yml", "dark-mode: true\nmodel: old-model\n");
 
-    expect(command).toContain("Join-Path $HOME '.config\\codex'");
-    expect(command).toContain('"$config.bak-$(Get-Date');
-    expect(command).toContain("Set-Content -Path $config -Encoding UTF8");
+    await runUnixCommand(createSetupCommand("unix", { ...hostileValues, client: "aider" }), home);
 
-    const revert = getRevertCommand("windows", "codex");
-    expect(revert).toContain("Copy-Item $latest.FullName $config -Force");
-  });
-});
-
-describe("permanent configuration for Aider", () => {
-  const values = {
-    baseUrl: "https://9router.eminai.cloud/v1",
-    apiKey: "sk-aider-test",
-    model: "cx/gpt-5.3-codex-spark",
-    client: "aider",
-  };
-
-  test("generates permanent backup & .aider.conf.yml update on macOS/Linux", () => {
-    const command = createSetupCommand("unix", values);
-
-    expect(command).toContain(".aider.conf.yml.bak-$(date");
-    expect(command).toContain('cat << \'EOF\' >> "$HOME/.aider.conf.yml"');
-    expect(command).toContain("openai-api-base: https://9router.eminai.cloud/v1");
-    expect(command).toContain("openai-api-key: sk-aider-test");
-    expect(command).toContain("model: openai/cx/gpt-5.3-codex-spark");
-
-    const revert = getRevertCommand("unix", "aider");
-    expect(revert).toContain(".aider.conf.yml.bak-*");
+    const config = await readFile(target, "utf8");
+    expect(config).toContain("dark-mode: true");
+    expect(config).toContain(`openai-api-base: ${JSON.stringify(hostileValues.baseUrl)}`);
+    expect(config).toContain(`openai-api-key: ${JSON.stringify(hostileValues.apiKey)}`);
+    expect(config).toContain(`model: ${JSON.stringify(`openai/${hostileValues.model}`)}`);
+    expect(config.match(/^model:/gm)).toHaveLength(1);
   });
 
-  test("generates permanent backup & .aider.conf.yml update on Windows", () => {
-    const command = createSetupCommand("windows", values);
+  test("OpenCode command preserves provider settings and safely stores values", async () => {
+    const home = await createTemporaryHome();
+    const target = await writeHomeFile(home, ".config/opencode/opencode.json", JSON.stringify({
+      provider: { openai: { timeout: 30 }, custom: { enabled: true } },
+    }));
 
-    expect(command).toContain("Join-Path $HOME '.aider.conf.yml'");
-    expect(command).toContain('"$config.bak-$(Get-Date');
-    expect(command).toContain("Set-Content $config -Encoding UTF8");
+    await runUnixCommand(createSetupCommand("unix", { ...hostileValues, client: "opencode" }), home);
 
-    const revert = getRevertCommand("windows", "aider");
-    expect(revert).toContain("Copy-Item $latest.FullName $config -Force");
+    const config = JSON.parse(await readFile(target, "utf8"));
+    expect(config.model).toBe(hostileValues.model);
+    expect(config.provider.openai).toEqual({
+      timeout: 30,
+      baseUrl: hostileValues.baseUrl,
+      apiKey: hostileValues.apiKey,
+    });
+    expect(config.provider.custom).toEqual({ enabled: true });
+  });
+
+  test("Windows commands contain only encoded user values", () => {
+    for (const client of ["claude", "codex", "aider", "opencode"]) {
+      const command = createSetupCommand("windows", { ...hostileValues, client });
+      expect(command).toContain("FromBase64String");
+      expect(command).not.toContain(hostileValues.baseUrl);
+      expect(command).not.toContain(hostileValues.apiKey);
+      expect(command).not.toContain(hostileValues.model);
+    }
   });
 });
 
-describe("permanent configuration for OpenCode", () => {
-  const values = {
-    baseUrl: "https://api.together.xyz/v1",
-    apiKey: "sk-together-test",
-    model: "meta-llama/llama-3.3-70b-instruct",
-    client: "opencode",
-  };
-
-  test("generates permanent backup & opencode.json merge on macOS/Linux", () => {
-    const command = createSetupCommand("unix", values);
-
-    expect(command).toContain('mkdir -p "$HOME/.config/opencode"');
-    expect(command).toContain("opencode.json.bak-$(date");
-    expect(command).toContain("node -e");
-    expect(command).toContain('baseUrl: "https://api.together.xyz/v1"');
-    expect(command).toContain('apiKey: "sk-together-test"');
-
-    const revert = getRevertCommand("unix", "opencode");
-    expect(revert).toContain("opencode.json.bak-*");
-  });
-
-  test("generates permanent backup & opencode.json merge on Windows", () => {
-    const command = createSetupCommand("windows", values);
-
-    expect(command).toContain("Join-Path $HOME '.config\\opencode'");
-    expect(command).toContain('"$config.bak-$(Get-Date');
-    expect(command).toContain("Set-Content -Path $config -Encoding UTF8");
-
-    const revert = getRevertCommand("windows", "opencode");
-    expect(revert).toContain("Copy-Item $latest.FullName $config -Force");
-  });
-});
-
-describe("configPaths mapping", () => {
-  test("defines paths for all supported clients", () => {
+describe("config mappings and static routes", () => {
+  test("defines paths for every supported client", () => {
     expect(configPaths.claude.unix).toBe("~/.claude/settings.json");
     expect(configPaths.codex.unix).toBe("~/.config/codex/config.json");
     expect(configPaths.aider.unix).toBe("~/.aider.conf.yml");
     expect(configPaths.opencode.unix).toBe("~/.config/opencode/opencode.json");
   });
-});
 
-describe("static files", () => {
-  test("serves index.html, styles.css, app.js, commands.js, and docs pages", async () => {
-    const pages = ["/", "/index.html", "/docs", "/dpcs", "/docs.html", "/styles.css", "/app.js", "/commands.js"];
-    for (const page of pages) {
-      const response = await handleRequest(new Request(`http://local${page}`));
-      expect(response.status).toBe(200);
+  test("serves supported static files and rejects the old typo route", async () => {
+    const handler = createRequestHandler();
+    for (const page of ["/", "/index.html", "/docs", "/docs.html", "/styles.css", "/app.js", "/commands.js"]) {
+      expect((await handler(new Request(`http://local${page}`))).status).toBe(200);
     }
+    expect((await handler(new Request("http://local/dpcs"))).status).toBe(404);
   });
 });
