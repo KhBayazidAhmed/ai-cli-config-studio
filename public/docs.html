@@ -8,12 +8,6 @@
       content="Comprehensive user guide and documentation for AI CLI Config Studio — learn how to use the studio to configure Claude Code, Codex, Aider, and OpenCode with automatic backups."
     />
     <title>How to Use &amp; Documentation — AI CLI Config Studio</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -247,10 +241,10 @@ opencode</code></pre>
           <section class="docs-section" id="gateways">
             <h2>🌐 Supported Gateways &amp; Presets</h2>
             <p>
-              AI CLI Config Studio works with any provider that exposes an OpenAI-compliant <code>GET /models</code> endpoint. Built-in presets include:
+              AI CLI Config Studio works with any public HTTPS provider that exposes an OpenAI-compliant <code>GET /models</code> endpoint. Built-in presets include:
             </p>
             <ul>
-              <li><strong>9Router:</strong> <code>https://api.9router.com/v1</code></li>
+              <li><strong>9Router:</strong> <code>https://9router.eminai.cloud/v1</code></li>
               <li><strong>OpenRouter:</strong> <code>https://openrouter.ai/api/v1</code></li>
               <li><strong>DeepSeek:</strong> <code>https://api.deepseek.com/v1</code></li>
               <li><strong>Groq:</strong> <code>https://api.groq.com/openai/v1</code></li>
@@ -264,7 +258,7 @@ opencode</code></pre>
             <ul>
               <li><strong>In-Memory Only:</strong> API keys are never stored on disk, never logged to terminal history on the server, and never sent to remote analytics.</li>
               <li><strong>Zero Telemetry:</strong> No tracking cookies, external analytics, or remote logging.</li>
-              <li><strong>SSRF Hardening:</strong> Built-in server proxy blocks any requests targeting internal LANs, <code>localhost</code>, or loopback interfaces.</li>
+              <li><strong>SSRF Hardening:</strong> The proxy requires HTTPS, validates resolved IPv4 and IPv6 addresses, blocks local/private networks, and refuses cross-origin redirects.</li>
             </ul>
           </section>
 
@@ -280,7 +274,8 @@ bun run dev</code></pre>
             <pre class="docs-code-block"><code>docker compose up -d</code></pre>
 
             <h3>Run Directly from GitHub (No Clone Needed)</h3>
-            <pre class="docs-code-block"><code>docker compose -f docker-compose.git.yml up -d</code></pre>
+            <pre class="docs-code-block"><code>docker build -t ai-cli-config-studio https://github.com/KhBayazidAhmed/ai-cli-config-studio.git#main
+docker run -d -p 3000:3000 --name ai-cli-config-studio ai-cli-config-studio</code></pre>
           </section>
         </div>
       </div>
