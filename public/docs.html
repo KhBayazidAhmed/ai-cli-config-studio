@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Comprehensive user guide and documentation for AI CLI Config Studio — learn how to use the studio to configure Claude Code, Codex, Aider, and OpenCode with automatic backups."
+      content="Comprehensive user guide and documentation for AI CLI Config Studio — learn how to use the studio to configure Claude Code, Codex, and OpenCode with automatic backups."
     />
     <title>How to Use &amp; Documentation — AI CLI Config Studio</title>
     <link rel="stylesheet" href="/styles.css" />
@@ -90,7 +90,7 @@
                 Enter your gateway API key into the <strong>API Key</strong> input and click <kbd>Fetch Models</kbd>.
               </p>
               <div class="docs-tip-box">
-                <strong>🔒 Security Guarantee:</strong> Your API key is used strictly in-memory to query your provider's <code>/models</code> endpoint and injected directly into your local clipboard command. It is never stored or transmitted to any third-party server.
+                <strong>🔒 Security Guarantee:</strong> Your API key is saved only in this browser's local storage so the form survives a reload. It is used to query your provider's <code>/models</code> endpoint and injected directly into your local clipboard command. It is never stored in a remote database or transmitted to a third-party service.
               </div>
             </div>
 
@@ -98,12 +98,11 @@
             <div class="docs-step-card">
               <div class="docs-step-header">
                 <span class="docs-step-num">2</span>
-                <span class="docs-step-title">Select Assistant, Model &amp; Operating System</span>
+                <span class="docs-step-title">Select Model &amp; Assistant</span>
               </div>
               <ul>
-                <li><strong>Target Assistant:</strong> Choose from <strong>Claude Code</strong>, <strong>Codex CLI</strong>, <strong>Aider</strong>, or <strong>OpenCode</strong>.</li>
                 <li><strong>Target Model:</strong> Select your preferred model from the dropdown populated by your gateway.</li>
-                <li><strong>Operating System:</strong> Choose <strong>macOS / Linux</strong> (<kbd>zsh</kbd>/<kbd>bash</kbd>) or <strong>Windows</strong> (<kbd>PowerShell</kbd>).</li>
+                <li><strong>Target Assistant:</strong> Choose from <strong>Claude Code</strong>, <strong>Codex CLI</strong>, or <strong>OpenCode</strong>.</li>
               </ul>
             </div>
 
@@ -114,16 +113,22 @@
                 <span class="docs-step-title">Copy &amp; Execute the Generated Command</span>
               </div>
               <p>
-                Click <kbd>Copy Terminal Command</kbd> on the right panel. Then open your terminal application and paste the command.
+                Choose <strong>Temporary</strong> or <strong>Permanent</strong> configuration and select <strong>macOS / Linux</strong> or <strong>Windows</strong> directly above the command preview. Then click the copy button and paste the command into your terminal.
               </p>
+              <div class="docs-tip-box">
+                <strong>No Node.js setup required:</strong> You do not need Node.js, npm, Bun, or project dependencies. Temporary macOS/Linux commands use shell features only. Permanent commands automatically use Python 3, system Perl, or the JavaScript runtime built into macOS; Windows uses PowerShell.
+              </div>
               <p>
-                The command will automatically:
+                Permanent mode will automatically:
               </p>
               <ol>
                 <li>Create a timestamped backup of any existing configuration (e.g. <code>~/.claude/settings.json.bak-YYYYMMDD-HHMMSS</code>).</li>
                 <li>Safely merge the gateway URL, authentication key, and model directly into your config file.</li>
                 <li>Preserve all of your other custom preferences, tools, and hooks.</li>
+                <li>Show each setup step, then open the selected CLI interactively with the chosen model.</li>
               </ol>
+              <p>Permanent mode opens the CLI after saving the configuration. It does not send an automatic prompt or make a model request by itself.</p>
+              <p>Temporary mode produces a readable command with plainly labeled environment variables, then immediately opens the selected CLI with the chosen model in that terminal session. It does not modify or back up configuration files, and it does not send an automatic prompt.</p>
             </div>
           </section>
 
@@ -149,23 +154,12 @@ claude
 
             <h3>🟢 2. OpenAI Codex CLI (`codex`)</h3>
             <p>
-              Your settings are saved to <code>~/.config/codex/config.json</code>. Launch Codex to start generating code:
+              Your settings are saved to <code>~/.codex/config.toml</code> using a custom OpenAI-compatible model provider. Launch Codex to start generating code:
             </p>
             <pre class="docs-code-block"><code># Run Codex CLI
-codex
+codex</code></pre>
 
-# Or pass a single prompt
-codex "Refactor the database queries in db.ts to use connection pooling"</code></pre>
-
-            <h3>🔵 3. Aider (`aider`)</h3>
-            <p>
-              Aider pairs with you in your terminal. Since settings are saved in <code>~/.aider.conf.yml</code>, simply run:
-            </p>
-            <pre class="docs-code-block"><code># Navigate to your git repository and run aider
-cd my-project
-aider</code></pre>
-
-            <h3>🟠 4. OpenCode (`opencode`)</h3>
+            <h3>🟠 3. OpenCode (`opencode`)</h3>
             <p>
               OpenCode reads from <code>~/.config/opencode/opencode.json</code>. Launch it with:
             </p>
@@ -216,21 +210,15 @@ opencode</code></pre>
                   </tr>
                   <tr>
                     <td><strong>Codex CLI</strong></td>
-                    <td><code>~/.config/codex/config.json</code></td>
-                    <td><code>$HOME\.config\codex\config.json</code></td>
-                    <td><code>baseUrl</code>, <code>apiKey</code>, <code>model</code></td>
-                  </tr>
-                  <tr>
-                    <td><strong>Aider</strong></td>
-                    <td><code>~/.aider.conf.yml</code></td>
-                    <td><code>$HOME\.aider.conf.yml</code></td>
-                    <td><code>openai-api-base</code>, <code>openai-api-key</code>, <code>model</code></td>
+                    <td><code>~/.codex/config.toml</code></td>
+                    <td><code>$HOME\.codex\config.toml</code></td>
+                    <td><code>model</code>, <code>model_provider</code>, <code>model_providers.config-studio</code></td>
                   </tr>
                   <tr>
                     <td><strong>OpenCode</strong></td>
                     <td><code>~/.config/opencode/opencode.json</code></td>
                     <td><code>$HOME\.config\opencode\opencode.json</code></td>
-                    <td><code>model</code>, <code>provider.openai.baseUrl</code>, <code>provider.openai.apiKey</code></td>
+                    <td><code>model</code>, <code>provider.config-studio.options</code>, <code>provider.config-studio.models</code></td>
                   </tr>
                 </tbody>
               </table>

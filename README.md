@@ -3,8 +3,7 @@
 A fast, lightweight, dependency-free Bun web app that discovers models from any public OpenAI-compatible gateway (e.g. 9Router, OpenRouter, DeepSeek, Groq, Together AI) and generates **permanent configuration commands** with **automatic timestamped backups** for popular AI coding CLIs:
 
 - 🟣 **Claude Code (`claude`)** → `~/.claude/settings.json`
-- 🟢 **OpenAI Codex CLI (`codex`)** → `~/.config/codex/config.json`
-- 🔵 **Aider (`aider`)** → `~/.aider.conf.yml`
+- 🟢 **OpenAI Codex CLI (`codex`)** → `~/.codex/config.toml`
 - 🟠 **OpenCode (`opencode`)** → `~/.config/opencode/opencode.json`
 
 📖 **Full In-App Documentation:** Available directly at [`/docs`](http://localhost:3000/docs) when running locally or on the web app header.
@@ -50,19 +49,21 @@ For detailed architectural information, see the [In-App Documentation (`/docs`)]
 
 ### 1. Model Discovery & Gateway Integration
 - Connects to any public HTTPS OpenAI-compatible provider serving a `GET /models` endpoint (e.g., 9Router, OpenRouter, DeepSeek, Groq, Together AI, custom gateways).
-- *Privacy Guarantee:* Your API Key is used strictly in memory by the local proxy and never persisted, logged, or sent to external databases.
+- *Privacy Guarantee:* Your API key is persisted only in the current browser's local storage and is never logged or sent to an external database.
 
-### 2. Direct Configuration File Merging
-Commands write directly to persistent tool configuration files without session-only environment variables:
-- **Claude Code (`claude`)**: Safely merges into `~/.claude/settings.json` under the `env` block (`ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL`).
-- **Codex CLI (`codex`)**: Merges into `~/.config/codex/config.json` (`baseUrl`, `apiKey`, `model`).
-- **Aider (`aider`)**: Appends/updates persistent YAML configuration in `~/.aider.conf.yml` (`openai-api-base`, `openai-api-key`, `model`).
-- **OpenCode (`opencode`)**: Merges into `~/.config/opencode/opencode.json` (`model`, `provider.openai`).
+### 2. Temporary & Permanent Configuration
+Permanent commands write directly to persistent tool configuration files:
+- **Claude Code (`claude`)**: Safely merges the Anthropic gateway root, bearer token, selected model, and gateway model discovery into `~/.claude/settings.json`.
+- **Codex CLI (`codex`)**: Updates `~/.codex/config.toml` with a `config-studio` model provider using the Responses API and the selected model.
+- **OpenCode (`opencode`)**: Adds a `config-studio` OpenAI-compatible provider under `provider.config-studio` in `~/.config/opencode/opencode.json`.
 - **Non-Destructive:** Retains any existing user preferences, custom themes, allowed tools, and hooks.
+- **Temporary Mode:** Generates a readable command that exports session-only environment variables and immediately opens the selected CLI with the chosen model, without changing configuration files or sending an automatic prompt.
+- **No Node Setup:** End users do not need Node.js, npm, Bun, or project dependencies. Temporary macOS/Linux commands use the shell only; permanent commands automatically use Python 3, system Perl, or the built-in macOS JavaScript runtime. Windows commands use PowerShell.
+- **Readable Permanent Setup:** Permanent commands show numbered progress logs, back up and update the configuration, then open the selected CLI interactively with the chosen model. They do not send an automatic prompt.
 
 ### 3. Automatic Backup & 1-Click Rollback
 - **Timestamped Backup:** Before updating any file, the generated command creates a backup:
-  - macOS / Linux: `config.json.bak-$(date +%Y%m%d-%H%M%S)`
+  - macOS / Linux: `<config-file>.bak-$(date +%Y%m%d-%H%M%S)`
   - Windows (PowerShell): `$config.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')`
 - **Instant Restore:** A matching one-click restore command is generated in the studio to immediately revert to the latest backup.
 

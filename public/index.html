@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta
       name="description"
-      content="Generate safe, permanent setup commands for Claude Code, Codex CLI, Aider, and OpenCode with automatic backups for any OpenAI-compatible AI provider gateway."
+      content="Generate safe, permanent setup commands for Claude Code, Codex CLI, and OpenCode with automatic backups for any OpenAI-compatible AI provider gateway."
     />
     <title>AI CLI Config Studio — Permanent Assistant Setup</title>
     <link rel="stylesheet" href="/styles.css" />
@@ -49,7 +49,7 @@
       <header class="hero">
         <h1>Configure AI Coding CLIs</h1>
         <p>
-          Connect any OpenAI-compatible provider, choose your target AI coding tool (Claude Code, Codex CLI, Aider, or OpenCode) and model, and get a permanent configuration command with automatic backups.
+          Connect any OpenAI-compatible provider, choose your target AI coding tool (Claude Code, Codex CLI, or OpenCode) and model, and get a permanent configuration command with automatic backups.
         </p>
       </header>
 
@@ -170,7 +170,25 @@
               <span class="step-num" id="step-2-badge">2</span>
               <div>
                 <h2>Select Options</h2>
-                <p>Choose target AI CLI, model, and operating system.</p>
+                <p>Choose a model, target AI CLI, and operating system.</p>
+              </div>
+            </div>
+
+            <!-- Model Selection Dropdown -->
+            <div class="field-group preference-model-field">
+              <div class="field-header">
+                <label id="target-model-label" for="models">Target Model</label>
+                <span class="field-info" id="model-count-hint">Connect provider first</span>
+              </div>
+              <div class="select-container">
+                <select id="models" disabled>
+                  <option value="">Connect provider above to load models</option>
+                </select>
+                <span class="select-arrow" aria-hidden="true">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"></polyline>
+                  </svg>
+                </span>
               </div>
             </div>
 
@@ -192,7 +210,6 @@
                       </span>
                       <strong class="radio-card-title">Claude Code</strong>
                     </div>
-                    <p class="radio-card-desc">Permanent ~/.claude/settings.json setup with auto-backup.</p>
                   </div>
                 </label>
                 <label class="radio-card">
@@ -207,22 +224,6 @@
                       </span>
                       <strong class="radio-card-title">Codex CLI</strong>
                     </div>
-                    <p class="radio-card-desc">Permanent ~/.config/codex/config.json setup with auto-backup.</p>
-                  </div>
-                </label>
-                <label class="radio-card">
-                  <input type="radio" name="client" value="aider" />
-                  <div class="radio-card-body">
-                    <div class="radio-card-top">
-                      <span class="radio-card-icon">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <circle cx="12" cy="12" r="10"></circle>
-                          <polygon points="10 8 16 12 10 16 10 8"></polygon>
-                        </svg>
-                      </span>
-                      <strong class="radio-card-title">Aider</strong>
-                    </div>
-                    <p class="radio-card-desc">Permanent ~/.aider.conf.yml YAML setup with auto-backup.</p>
                   </div>
                 </label>
                 <label class="radio-card">
@@ -237,72 +238,22 @@
                       </span>
                       <strong class="radio-card-title">OpenCode</strong>
                     </div>
-                    <p class="radio-card-desc">Permanent ~/.config/opencode/opencode.json with auto-backup.</p>
                   </div>
                 </label>
               </div>
-            </fieldset>
-
-            <!-- Model Selection Dropdown -->
-            <div class="field-group">
-              <div class="field-header">
-                <label for="models">Target Model</label>
-                <span class="field-info" id="model-count-hint">Connect provider first</span>
-              </div>
-              <div class="select-container">
-                <select id="models" disabled>
-                  <option value="">Connect provider above to load models</option>
-                </select>
-                <span class="select-arrow" aria-hidden="true">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"></polyline>
+              <div class="client-choice-detail" aria-live="polite">
+                <span class="client-choice-check" aria-hidden="true">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
                   </svg>
                 </span>
-              </div>
-            </div>
-
-            <!-- Platform Selection Radio Cards -->
-            <fieldset class="options-fieldset">
-              <legend class="options-legend">
-                <span>Operating System</span>
-                <span class="legend-note">Target shell command</span>
-              </legend>
-              <div class="radio-card-group compact-group">
-                <label class="radio-card">
-                  <input type="radio" name="platform" value="unix" checked />
-                  <div class="radio-card-body compact-body">
-                    <div class="radio-card-top">
-                      <span class="radio-card-icon">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <rect width="18" height="14" x="3" y="5" rx="2"></rect>
-                          <polyline points="7 10 10 12 7 14"></polyline>
-                          <line x1="12" y1="14" x2="16" y2="14"></line>
-                        </svg>
-                      </span>
-                      <strong class="radio-card-title">macOS / Linux</strong>
-                    </div>
-                    <p class="radio-card-desc">Bash / Zsh</p>
-                  </div>
-                </label>
-                <label class="radio-card">
-                  <input type="radio" name="platform" value="windows" />
-                  <div class="radio-card-body compact-body">
-                    <div class="radio-card-top">
-                      <span class="radio-card-icon">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                          <rect width="8" height="8" x="3" y="3" rx="1"></rect>
-                          <rect width="8" height="8" x="13" y="3" rx="1"></rect>
-                          <rect width="8" height="8" x="3" y="13" rx="1"></rect>
-                          <rect width="8" height="8" x="13" y="13" rx="1"></rect>
-                        </svg>
-                      </span>
-                      <strong class="radio-card-title">Windows</strong>
-                    </div>
-                    <p class="radio-card-desc">PowerShell</p>
-                  </div>
-                </label>
+                <div>
+                  <strong id="client-choice-name">Claude Code selected</strong>
+                  <span id="client-choice-description">Writes to <code id="client-config-path">~/.claude/settings.json</code> with automatic backup</span>
+                </div>
               </div>
             </fieldset>
+
           </section>
         </div>
 
@@ -315,12 +266,63 @@
                 <span class="step-num" id="step-3-badge">3</span>
                 <div>
                   <h2>Generated Command</h2>
-                  <p>Run this in your terminal to save permanent configuration.</p>
+                  <p id="command-panel-description">Run this to save the configuration and open the CLI with the selected model.</p>
                 </div>
               </div>
               <div class="status-pill" id="ready-state">
                 <span class="pill-dot"></span>
                 <span class="badge-text">Waiting</span>
+              </div>
+            </div>
+
+            <div class="command-preferences">
+              <div class="command-preference-row config-mode-group" role="group" aria-labelledby="configuration-label">
+                <div class="command-preference-copy">
+                  <strong id="configuration-label">Configuration</strong>
+                  <small id="config-mode-hint" class="config-mode-hint">Saved with automatic backup</small>
+                </div>
+                <div class="config-switch-wrap">
+                  <span id="temporary-mode-label">Temporary</span>
+                  <label class="config-switch" aria-label="Configuration duration">
+                    <input id="config-mode-toggle" type="checkbox" checked aria-labelledby="temporary-mode-label permanent-mode-label" />
+                    <span class="config-switch-track" aria-hidden="true">
+                      <span class="config-switch-thumb"></span>
+                    </span>
+                  </label>
+                  <span id="permanent-mode-label">Permanent</span>
+                </div>
+              </div>
+
+              <div class="command-preference-row platform-preference-row" role="group" aria-labelledby="operating-system-label">
+                <div class="command-preference-copy">
+                  <strong id="operating-system-label">Operating System</strong>
+                  <small>Choose your terminal syntax</small>
+                </div>
+                <div class="platform-toggle" role="group" aria-label="Operating system">
+                  <label>
+                    <input type="radio" name="platform" value="unix" checked />
+                    <span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect width="18" height="14" x="3" y="5" rx="2"></rect>
+                        <polyline points="7 10 10 12 7 14"></polyline>
+                        <line x1="12" y1="14" x2="16" y2="14"></line>
+                      </svg>
+                      <strong>macOS / Linux</strong>
+                    </span>
+                  </label>
+                  <label>
+                    <input type="radio" name="platform" value="windows" />
+                    <span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect width="8" height="8" x="3" y="3" rx="1"></rect>
+                        <rect width="8" height="8" x="13" y="3" rx="1"></rect>
+                        <rect width="8" height="8" x="3" y="13" rx="1"></rect>
+                        <rect width="8" height="8" x="13" y="13" rx="1"></rect>
+                      </svg>
+                      <strong>Windows</strong>
+                    </span>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -375,13 +377,13 @@
                 </svg>
               </span>
               <p id="security-banner-text">
-                <strong>Permanent Configuration:</strong> Automatically creates a timestamped backup before writing settings. Persists across all terminal sessions.
+                <strong>Permanent Configuration:</strong> Creates a timestamped backup, saves the settings, and opens the CLI with the selected model. The settings persist across terminal sessions.
               </p>
             </div>
           </section>
 
           <!-- Revert Accordion -->
-          <details class="panel accordion-panel">
+          <details class="panel accordion-panel" id="revert-panel">
             <summary class="accordion-header">
               <div class="accordion-title-wrap">
                 <span class="accordion-icon">
@@ -448,8 +450,7 @@
                 <h4>Where are configuration files saved?</h4>
                 <p>
                   • <strong>Claude Code:</strong> <code>~/.claude/settings.json</code><br />
-                  • <strong>Codex CLI:</strong> <code>~/.config/codex/config.json</code><br />
-                  • <strong>Aider:</strong> <code>~/.aider.conf.yml</code><br />
+                  • <strong>Codex CLI:</strong> <code>~/.codex/config.toml</code><br />
                   • <strong>OpenCode:</strong> <code>~/.config/opencode/opencode.json</code>
                 </p>
               </div>
@@ -459,7 +460,7 @@
               </div>
               <div class="faq-entry">
                 <h4>Is my API key stored online?</h4>
-                <p>No. Keys are only used locally in memory for model discovery and inserted into the terminal command you copy. There is no remote database or tracking.</p>
+                <p>No. Your key is saved only in this browser's local storage so the form survives a reload. It is used for model discovery and inserted into the terminal command you copy. There is no remote database or tracking.</p>
               </div>
             </div>
           </details>
@@ -477,7 +478,7 @@
           </span>
           <div>
             <strong>Private &amp; Local</strong>
-            <p>API keys are never stored, logged, or tracked.</p>
+            <p>Form values stay in this browser's local storage and are never tracked.</p>
           </div>
         </div>
         <div class="trust-item">
@@ -502,7 +503,7 @@
           </span>
           <div>
             <strong>Multi-CLI Support</strong>
-            <p>Ready-to-use commands for Claude Code, Codex, Aider, &amp; OpenCode.</p>
+            <p>Ready-to-use commands for Claude Code, Codex, &amp; OpenCode.</p>
           </div>
         </div>
       </section>
