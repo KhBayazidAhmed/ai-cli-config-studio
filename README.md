@@ -36,13 +36,6 @@ docker compose up -d
 ### Option 2: Run directly from GitHub without cloning
 
 ```bash
-# Pull and run directly from GitHub repository with Docker Compose
-docker compose -f docker-compose.git.yml up -d
-```
-
-Or using standard Docker CLI:
-
-```bash
 docker build -t ai-cli-config-studio https://github.com/KhBayazidAhmed/ai-cli-config-studio.git#main
 docker run -d -p 3000:3000 --name ai-cli-config-studio ai-cli-config-studio
 ```
@@ -56,7 +49,7 @@ Then open [http://localhost:3000](http://localhost:3000) in your browser.
 For detailed architectural information, see the [In-App Documentation (`/docs`)](http://localhost:3000/docs).
 
 ### 1. Model Discovery & Gateway Integration
-- Connects to any OpenAI-compatible provider serving a `GET /models` endpoint (e.g., 9Router, OpenRouter, DeepSeek, Groq, Together AI, custom gateways).
+- Connects to any public HTTPS OpenAI-compatible provider serving a `GET /models` endpoint (e.g., 9Router, OpenRouter, DeepSeek, Groq, Together AI, custom gateways).
 - *Privacy Guarantee:* Your API Key is used strictly in memory by the local proxy and never persisted, logged, or sent to external databases.
 
 ### 2. Direct Configuration File Merging
@@ -78,9 +71,19 @@ Commands write directly to persistent tool configuration files without session-o
 ## 🧪 Testing & Verification
 
 ```bash
-# Run test suite
+# Run unit/integration tests
 bun test
+
+# Run browser end-to-end tests
+bun run test:e2e
+
+# Run every test suite
+bun run test:all
 
 # Run build bundle check
 bun run check
 ```
+
+The E2E suite starts an isolated Bun server automatically and covers the complete browser-to-API
+Studio workflow, all supported CLI command variants, clipboard actions, gateway errors,
+documentation, API safety checks, and mobile layout. It runs with installed Google Chrome.

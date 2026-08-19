@@ -3,5 +3,10 @@
 .DS_Store
 node_modules
 tests
+.github
+playwright.config.ts
+playwright-report
+test-results
+bun.lock
 *.log
 README.md
