@@ -218,6 +218,82 @@ async function fetchGateway(
   throw new Error("Gateway redirected too many times.");
 }
 
+function addModelId(models: Set<string>, value: unknown): void {
+  if (typeof value !== "string") return;
+  const model = value.trim();
+  if (model) models.add(model);
+}
+
+function collectModelEntries(value: unknown, models: Set<string>): void {
+  if (!Array.isArray(value)) return;
+
+  for (const item of value) {
+    if (typeof item === "string") {
+      addModelId(models, item);
+      continue;
+    }
+    if (!item || typeof item !== "object") continue;
+
+    const entry = item as Record<string, unknown>;
+    addModelId(models, entry.id ?? entry.model ?? entry.slug ?? entry.name);
+  }
+}
+
+function collectModelMap(value: unknown, models: Set<string>): void {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+
+  for (const [modelId, details] of Object.entries(value as Record<string, unknown>)) {
+    if (details && typeof details === "object" && !Array.isArray(details)) {
+      const entry = details as Record<string, unknown>;
+      const explicitId = entry.id ?? entry.model ?? entry.slug;
+      addModelId(models, explicitId ?? modelId);
+    } else {
+      addModelId(models, modelId);
+    }
+  }
+}
+
+/**
+ * Extracts model IDs from common OpenAI-compatible and multi-provider gateway shapes.
+ */
+export function extractModelIds(payload: unknown): string[] {
+  const models = new Set<string>();
+
+  if (Array.isArray(payload)) {
+    collectModelEntries(payload, models);
+  } else if (payload && typeof payload === "object") {
+    const root = payload as Record<string, unknown>;
+
+    collectModelEntries(root.data, models);
+    collectModelEntries(root.models, models);
+    collectModelEntries(root.value, models);
+    collectModelMap(root.models, models);
+
+    const providers = root.providers;
+    const providerEntries = Array.isArray(providers)
+      ? providers
+      : providers && typeof providers === "object"
+        ? Object.values(providers as Record<string, unknown>)
+        : [];
+
+    for (const provider of providerEntries) {
+      if (Array.isArray(provider)) {
+        collectModelEntries(provider, models);
+        continue;
+      }
+      if (!provider || typeof provider !== "object") continue;
+
+      const providerPayload = provider as Record<string, unknown>;
+      collectModelEntries(providerPayload.data, models);
+      collectModelEntries(providerPayload.models, models);
+      collectModelEntries(providerPayload.value, models);
+      collectModelMap(providerPayload.models, models);
+    }
+  }
+
+  return [...models].sort((left, right) => left.localeCompare(right));
+}
+
 /**
  * Handles POST /api/models to discover models from an OpenAI-compatible gateway.
  */
@@ -286,18 +362,8 @@ async function handleModelsDiscovery(
       );
     }
 
-    const payload = (await response.json()) as { data?: unknown };
-    const data = Array.isArray(payload?.data) ? payload.data : [];
-
-    const discovered = [
-      ...new Set(
-        data
-          .map((item) => (item && typeof item === "object" ? (item as { id?: unknown }).id : undefined))
-          .filter((id): id is string => typeof id === "string")
-          .map((id) => id.trim())
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ].sort();
+    const payload = await response.json();
+    const discovered = extractModelIds(payload);
 
     if (!discovered.length) {
       return jsonResponse({ error: "The gateway returned no models." }, 502);
