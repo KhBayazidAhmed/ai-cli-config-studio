@@ -180,8 +180,15 @@ opencode</code></pre>
               <li>Go to the Studio page.</li>
               <li>Expand the <strong>Restore Previous Config</strong> accordion below the terminal preview.</li>
               <li>Click <kbd>Copy Restore Command</kbd>.</li>
-              <li>Paste and run the command in your terminal. It will automatically detect and reinstate your most recent <code>.bak-*</code> file.</li>
+              <li>Paste and run the command in your terminal. It reinstates the most recent <code>.bak-*</code> file, chosen by the timestamp in its name.</li>
             </ol>
+            <p>
+              The restore command reports what it did: it prints the backup it reinstated, or exits with
+              <code>No backup found</code> when there is nothing to roll back to. Before overwriting the current
+              configuration it keeps a <code>.prerestore-YYYYMMDD-HHMMSS</code> copy, so an accidental restore can be
+              undone. That copy is never treated as a backup, so running the restore twice reinstates the same
+              <code>.bak-*</code> file both times.
+            </p>
           </section>
 
           <!-- 4. Supported CLIs & File Locations -->
@@ -206,19 +213,19 @@ opencode</code></pre>
                     <td><strong>Claude Code</strong></td>
                     <td><code>~/.claude/settings.json</code></td>
                     <td><code>$HOME\.claude\settings.json</code></td>
-                    <td><code>env.ANTHROPIC_BASE_URL</code>, <code>env.ANTHROPIC_AUTH_TOKEN</code>, <code>env.ANTHROPIC_MODEL</code></td>
+                    <td><code>env.ANTHROPIC_BASE_URL</code>, <code>env.ANTHROPIC_AUTH_TOKEN</code>, <code>env.ANTHROPIC_MODEL</code>, <code>effortLevel</code>, <code>modelSettings</code></td>
                   </tr>
                   <tr>
                     <td><strong>Codex CLI</strong></td>
                     <td><code>~/.codex/config.toml</code></td>
                     <td><code>$HOME\.codex\config.toml</code></td>
-                    <td><code>model</code>, <code>model_provider</code>, <code>model_providers.config-studio</code></td>
+                    <td><code>model</code>, <code>model_provider</code>, <code>model_providers.config-studio</code>, <code>model_reasoning_effort</code></td>
                   </tr>
                   <tr>
                     <td><strong>OpenCode</strong></td>
                     <td><code>~/.config/opencode/opencode.json</code></td>
                     <td><code>$HOME\.config\opencode\opencode.json</code></td>
-                    <td><code>model</code>, <code>provider.config-studio.options</code>, <code>provider.config-studio.models</code></td>
+                    <td><code>model</code>, <code>provider.config-studio.options</code>, <code>provider.config-studio.models</code> (with <code>options.reasoningEffort</code>)</td>
                   </tr>
                 </tbody>
               </table>

@@ -173,7 +173,9 @@ test("copies the real setup and restore commands", async ({ page, context }) => 
   await page.locator("#copy-revert").click();
   await expect(page.locator("#copy-revert-text")).toHaveText("Restore Command Copied");
   const restoreCommand = await page.evaluate(() => navigator.clipboard.readText());
-  expect(restoreCommand).toContain("settings.json.bak-*");
+  expect(restoreCommand).toContain('config="$HOME/.claude/settings.json"');
+  expect(restoreCommand).toContain('"$config".bak-*');
+  expect(restoreCommand).toContain("No backup found");
 });
 
 test("shows gateway failures and invalidates stale models when credentials change", async ({ page }) => {

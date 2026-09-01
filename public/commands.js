@@ -4,6 +4,9 @@
  * configurations directly into client config files with timestamped backups.
  */
 
+/** Default reasoning effort written for every client and every model. */
+const DEFAULT_EFFORT = "medium";
+
 // ============================================================================
 // 1. Claude Code (~/.claude/settings.json)
 // ============================================================================
@@ -43,6 +46,10 @@ function opencodeModel(model = "") {
 function buildClaudeSessionSettings({ baseUrl, apiKey, model }) {
   return JSON.stringify({
     model,
+    effortLevel: DEFAULT_EFFORT,
+    modelSettings: {
+      [model]: { effortLevel: DEFAULT_EFFORT },
+    },
     env: {
       ANTHROPIC_BASE_URL: normalizeClaudeBaseUrl(baseUrl),
       ANTHROPIC_AUTH_TOKEN: apiKey,
@@ -65,7 +72,10 @@ function buildOpenCodeConfig({ baseUrl, apiKey, model }) {
           apiKey,
         },
         models: {
-          [model]: { name: model },
+          [model]: {
+            name: model,
+            options: { reasoningEffort: DEFAULT_EFFORT },
+          },
         },
       },
     },
@@ -77,20 +87,20 @@ c=os.environ["HC_CLIENT"]; h=pathlib.Path.home(); p={"claude":h/".claude/setting
 d=lambda k:os.environ[k]
 b,k,m=d("HC_BASE"),d("HC_KEY"),d("HC_MODEL")
 if c=="aider":
- s=p.read_text() if p.exists() else ""; lines=[x for x in s.splitlines() if not x.startswith(("openai-api-base:","openai-api-key:","model:"))]
+ s=p.read_text() if p.exists() else ""; lines=[x for x in s.splitlines() if not x.startswith(("openai-api-base:","openai-api-key:","model:","reasoning-effort:"))]
  while lines and not lines[-1]: lines.pop()
  if lines: lines.append("")
- lines += ["openai-api-base: "+json.dumps(b,ensure_ascii=False),"openai-api-key: "+json.dumps(k,ensure_ascii=False),"model: "+json.dumps(m,ensure_ascii=False)]; p.write_text("\\n".join(lines)+"\\n")
+ lines += ["openai-api-base: "+json.dumps(b,ensure_ascii=False),"openai-api-key: "+json.dumps(k,ensure_ascii=False),"model: "+json.dumps(m,ensure_ascii=False),'reasoning-effort: "medium"']; p.write_text("\\n".join(lines)+"\\n")
 elif c=="codex":
  s=p.read_text() if p.exists() else ""; out=[]; skipping=False; inserted=False
- root=["model = "+json.dumps(m,ensure_ascii=False),"model_provider = \\\"config-studio\\\""]
+ root=["model = "+json.dumps(m,ensure_ascii=False),"model_provider = \\\"config-studio\\\"","model_reasoning_effort = \\\"medium\\\""]
  for line in s.splitlines():
   stripped=line.strip()
   if stripped.startswith("[") and stripped.endswith("]"):
    if not inserted: out.extend(root+[""]); inserted=True
    if stripped=="[model_providers.config-studio]": skipping=True; continue
    skipping=False
-  if skipping or (not inserted and re.match(r"^\\s*(model|model_provider)\\s*=",line)): continue
+  if skipping or (not inserted and re.match(r"^\\s*(model|model_provider|model_reasoning_effort)\\s*=",line)): continue
   out.append(line)
  if not inserted: out.extend(([""] if out else [])+root)
  while out and not out[-1]: out.pop()
@@ -100,19 +110,19 @@ else:
  try: x=json.loads(p.read_text())
  except Exception: x={}
  if not isinstance(x,dict): x={}
- if c=="claude": x["env"]={**(x.get("env") if isinstance(x.get("env"),dict) else {}),"ANTHROPIC_BASE_URL":b,"ANTHROPIC_AUTH_TOKEN":k,"ANTHROPIC_MODEL":m,"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY":"1"}; x["model"]=m
+ if c=="claude": x["env"]={**(x.get("env") if isinstance(x.get("env"),dict) else {}),"ANTHROPIC_BASE_URL":b,"ANTHROPIC_AUTH_TOKEN":k,"ANTHROPIC_MODEL":m,"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY":"1"}; x["model"]=m; x["effortLevel"]="medium"; ms=x.get("modelSettings") if isinstance(x.get("modelSettings"),dict) else {}; me=ms.get(m) if isinstance(ms.get(m),dict) else {}; me["effortLevel"]="medium"; ms[m]=me; x["modelSettings"]=ms
  else:
-  x["$schema"]="https://opencode.ai/config.json"; x["model"]="config-studio/"+m; providers=x.get("provider") if isinstance(x.get("provider"),dict) else {}; provider=providers.get("config-studio") if isinstance(providers.get("config-studio"),dict) else {}; provider.update(npm="@ai-sdk/openai-compatible",name="Config Studio Gateway"); options=provider.get("options") if isinstance(provider.get("options"),dict) else {}; options.update(baseURL=b,apiKey=k); provider["options"]=options; models=provider.get("models") if isinstance(provider.get("models"),dict) else {}; entry=models.get(m) if isinstance(models.get(m),dict) else {}; entry["name"]=m; models[m]=entry; provider["models"]=models; providers["config-studio"]=provider; x["provider"]=providers
+  x["$schema"]="https://opencode.ai/config.json"; x["model"]="config-studio/"+m; providers=x.get("provider") if isinstance(x.get("provider"),dict) else {}; provider=providers.get("config-studio") if isinstance(providers.get("config-studio"),dict) else {}; provider.update(npm="@ai-sdk/openai-compatible",name="Config Studio Gateway"); options=provider.get("options") if isinstance(provider.get("options"),dict) else {}; options.update(baseURL=b,apiKey=k); provider["options"]=options; models=provider.get("models") if isinstance(provider.get("models"),dict) else {}; entry=models.get(m) if isinstance(models.get(m),dict) else {}; entry["name"]=m; entry["options"]={**(entry.get("options") if isinstance(entry.get("options"),dict) else {}),"reasoningEffort":"medium"}; models[m]=entry; provider["models"]=models; providers["config-studio"]=provider; x["provider"]=providers
  p.write_text(json.dumps(x,ensure_ascii=False,indent=2)+"\\n")`;
 
 const perlSetupScript = `use strict; use warnings; use JSON::PP;
 my $c=$ENV{HC_CLIENT}; my $h=$ENV{HOME}; my %p=(claude=>"$h/.claude/settings.json",codex=>"$h/.codex/config.toml",aider=>"$h/.aider.conf.yml",opencode=>"$h/.config/opencode/opencode.json"); my $p=$p{$c};
 my $d=sub { $ENV{$_[0]} }; my ($b,$k,$m)=map { $d->($_) } qw(HC_BASE HC_KEY HC_MODEL); my $j=JSON::PP->new->utf8->pretty;
-if($c eq "aider"){ my @l; if(open my $f,"<",$p){ local $/; @l=split /\\r?\\n/,<$f> } @l=grep { !/^(?:openai-api-base|openai-api-key|model):/ } @l; pop @l while @l && $l[-1] eq ""; push @l,"" if @l; my $q=JSON::PP->new->allow_nonref; push @l,"openai-api-base: ".$q->encode($b),"openai-api-key: ".$q->encode($k),"model: ".$q->encode($m); open my $f,">",$p or die $!; print $f join("\\n",@l),"\\n" }
-elsif($c eq "codex"){ my @l; if(open my $f,"<",$p){ local $/; @l=split /\\r?\\n/,<$f> } my @o; my $skip=0; my $inserted=0; my @root=('model = '.JSON::PP->new->allow_nonref->encode($m),'model_provider = "config-studio"'); for my $line(@l){ my $s=$line; $s=~s/^\\s+|\\s+$//g; if($s=~/^\\[.*\\]$/){ if(!$inserted){ push @o,@root,""; $inserted=1 } if($s eq '[model_providers.config-studio]'){ $skip=1; next } $skip=0 } next if $skip || (!$inserted && $line=~/^\\s*(?:model|model_provider)\\s*=/); push @o,$line } push @o,(scalar(@o)?"":()),@root unless $inserted; pop @o while @o && $o[-1] eq ""; my $q=JSON::PP->new->allow_nonref; push @o,"",'[model_providers.config-studio]','name = "Config Studio Gateway"','base_url = '.$q->encode($b),'experimental_bearer_token = '.$q->encode($k),'wire_api = "responses"'; open my $f,">",$p or die $!; print $f join("\\n",@o),"\\n" }
-else { my $x={}; if(open my $f,"<",$p){ local $/; my $raw=<$f>; my $v=eval { $j->decode($raw) }; $x=$v if ref($v) eq "HASH" } if($c eq "claude"){ $x->{env}={} unless ref($x->{env}) eq "HASH"; @{$x->{env}}{qw(ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY)}=($b,$k,$m,"1"); $x->{model}=$m } else { $x->{'$schema'}="https://opencode.ai/config.json"; $x->{model}="config-studio/$m"; $x->{provider}={} unless ref($x->{provider}) eq "HASH"; my $provider=$x->{provider}{'config-studio'}; $provider={} unless ref($provider) eq "HASH"; $provider->{npm}="\\@ai-sdk/openai-compatible"; $provider->{name}="Config Studio Gateway"; $provider->{options}={} unless ref($provider->{options}) eq "HASH"; @{$provider->{options}}{qw(baseURL apiKey)}=($b,$k); $provider->{models}={} unless ref($provider->{models}) eq "HASH"; $provider->{models}{$m}={} unless ref($provider->{models}{$m}) eq "HASH"; $provider->{models}{$m}{name}=$m; $x->{provider}{'config-studio'}=$provider } open my $f,">",$p or die $!; print $f $j->encode($x) }`;
+if($c eq "aider"){ my @l; if(open my $f,"<",$p){ local $/; @l=split /\\r?\\n/,<$f> } @l=grep { !/^(?:openai-api-base|openai-api-key|model|reasoning-effort):/ } @l; pop @l while @l && $l[-1] eq ""; push @l,"" if @l; my $q=JSON::PP->new->allow_nonref; push @l,"openai-api-base: ".$q->encode($b),"openai-api-key: ".$q->encode($k),"model: ".$q->encode($m),'reasoning-effort: "medium"'; open my $f,">",$p or die $!; print $f join("\\n",@l),"\\n" }
+elsif($c eq "codex"){ my @l; if(open my $f,"<",$p){ local $/; @l=split /\\r?\\n/,<$f> } my @o; my $skip=0; my $inserted=0; my @root=('model = '.JSON::PP->new->allow_nonref->encode($m),'model_provider = "config-studio"','model_reasoning_effort = "medium"'); for my $line(@l){ my $s=$line; $s=~s/^\\s+|\\s+$//g; if($s=~/^\\[.*\\]$/){ if(!$inserted){ push @o,@root,""; $inserted=1 } if($s eq '[model_providers.config-studio]'){ $skip=1; next } $skip=0 } next if $skip || (!$inserted && $line=~/^\\s*(?:model|model_provider|model_reasoning_effort)\\s*=/); push @o,$line } push @o,(scalar(@o)?"":()),@root unless $inserted; pop @o while @o && $o[-1] eq ""; my $q=JSON::PP->new->allow_nonref; push @o,"",'[model_providers.config-studio]','name = "Config Studio Gateway"','base_url = '.$q->encode($b),'experimental_bearer_token = '.$q->encode($k),'wire_api = "responses"'; open my $f,">",$p or die $!; print $f join("\\n",@o),"\\n" }
+else { my $x={}; if(open my $f,"<",$p){ local $/; my $raw=<$f>; my $v=eval { $j->decode($raw) }; $x=$v if ref($v) eq "HASH" } if($c eq "claude"){ $x->{env}={} unless ref($x->{env}) eq "HASH"; @{$x->{env}}{qw(ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY)}=($b,$k,$m,"1"); $x->{model}=$m; $x->{effortLevel}="medium"; $x->{modelSettings}={} unless ref($x->{modelSettings}) eq "HASH"; $x->{modelSettings}{$m}={} unless ref($x->{modelSettings}{$m}) eq "HASH"; $x->{modelSettings}{$m}{effortLevel}="medium" } else { $x->{'$schema'}="https://opencode.ai/config.json"; $x->{model}="config-studio/$m"; $x->{provider}={} unless ref($x->{provider}) eq "HASH"; my $provider=$x->{provider}{'config-studio'}; $provider={} unless ref($provider) eq "HASH"; $provider->{npm}="\\@ai-sdk/openai-compatible"; $provider->{name}="Config Studio Gateway"; $provider->{options}={} unless ref($provider->{options}) eq "HASH"; @{$provider->{options}}{qw(baseURL apiKey)}=($b,$k); $provider->{models}={} unless ref($provider->{models}) eq "HASH"; $provider->{models}{$m}={} unless ref($provider->{models}{$m}) eq "HASH"; $provider->{models}{$m}{name}=$m; $provider->{models}{$m}{options}={} unless ref($provider->{models}{$m}{options}) eq "HASH"; $provider->{models}{$m}{options}{reasoningEffort}="medium"; $x->{provider}{'config-studio'}=$provider } open my $f,">",$p or die $!; print $f $j->encode($x) }`;
 
-const macSetupScript = `ObjC.import("Foundation"); const e=$.NSProcessInfo.processInfo.environment; const v=k=>ObjC.unwrap(e.objectForKey(k)); const c=v("HC_CLIENT"),h=v("HOME"),p={claude:h+"/.claude/settings.json",codex:h+"/.codex/config.toml",aider:h+"/.aider.conf.yml",opencode:h+"/.config/opencode/opencode.json"}[c],b=v("HC_BASE"),k=v("HC_KEY"),m=v("HC_MODEL"); let s=""; try{s=ObjC.unwrap($.NSString.stringWithContentsOfFileEncodingError(p,$.NSUTF8StringEncoding,null))||""}catch(_){} if(c==="aider"){let l=s.split(/\\r?\\n/).filter(x=>!(/^(openai-api-base|openai-api-key|model):/.test(x)));while(l.length&&!l[l.length-1])l.pop();if(l.length)l.push("");l.push("openai-api-base: "+JSON.stringify(b),"openai-api-key: "+JSON.stringify(k),"model: "+JSON.stringify(m));s=l.join("\\n")+"\\n"}else if(c==="codex"){let out=[],skip=false,inserted=false,root=["model = "+JSON.stringify(m),'model_provider = "config-studio"'];for(const line of s.split(/\\r?\\n/)){const t=line.trim();if(t.startsWith("[")&&t.endsWith("]")){if(!inserted){out.push(...root,"");inserted=true}if(t==="[model_providers.config-studio]"){skip=true;continue}skip=false}if(skip||(!inserted&&/^\\s*(model|model_provider)\\s*=/.test(line)))continue;out.push(line)}if(!inserted){if(out.length)out.push("");out.push(...root)}while(out.length&&!out[out.length-1])out.pop();out.push("","[model_providers.config-studio]",'name = "Config Studio Gateway"',"base_url = "+JSON.stringify(b),"experimental_bearer_token = "+JSON.stringify(k),'wire_api = "responses"');s=out.join("\\n")+"\\n"}else{let x={};try{x=JSON.parse(s)}catch(_){}if(!x||Array.isArray(x)||typeof x!=="object")x={};if(c==="claude"){x.env=Object.assign({},x.env,{ANTHROPIC_BASE_URL:b,ANTHROPIC_AUTH_TOKEN:k,ANTHROPIC_MODEL:m,CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY:"1"});x.model=m}else{x.$schema="https://opencode.ai/config.json";x.model="config-studio/"+m;x.provider=Object.assign({},x.provider);const provider=Object.assign({},x.provider["config-studio"],{npm:"@ai-sdk/openai-compatible",name:"Config Studio Gateway"});provider.options=Object.assign({},provider.options,{baseURL:b,apiKey:k});provider.models=Object.assign({},provider.models);provider.models[m]=Object.assign({},provider.models[m],{name:m});x.provider["config-studio"]=provider}s=JSON.stringify(x,null,2)+"\\n"} $(s).writeToFileAtomicallyEncodingError(p,true,$.NSUTF8StringEncoding,null);`;
+const macSetupScript = `ObjC.import("Foundation"); const e=$.NSProcessInfo.processInfo.environment; const v=k=>ObjC.unwrap(e.objectForKey(k)); const c=v("HC_CLIENT"),h=v("HOME"),p={claude:h+"/.claude/settings.json",codex:h+"/.codex/config.toml",aider:h+"/.aider.conf.yml",opencode:h+"/.config/opencode/opencode.json"}[c],b=v("HC_BASE"),k=v("HC_KEY"),m=v("HC_MODEL"); let s=""; try{s=ObjC.unwrap($.NSString.stringWithContentsOfFileEncodingError(p,$.NSUTF8StringEncoding,null))||""}catch(_){} if(c==="aider"){let l=s.split(/\\r?\\n/).filter(x=>!(/^(openai-api-base|openai-api-key|model|reasoning-effort):/.test(x)));while(l.length&&!l[l.length-1])l.pop();if(l.length)l.push("");l.push("openai-api-base: "+JSON.stringify(b),"openai-api-key: "+JSON.stringify(k),"model: "+JSON.stringify(m),'reasoning-effort: "medium"');s=l.join("\\n")+"\\n"}else if(c==="codex"){let out=[],skip=false,inserted=false,root=["model = "+JSON.stringify(m),'model_provider = "config-studio"','model_reasoning_effort = "medium"'];for(const line of s.split(/\\r?\\n/)){const t=line.trim();if(t.startsWith("[")&&t.endsWith("]")){if(!inserted){out.push(...root,"");inserted=true}if(t==="[model_providers.config-studio]"){skip=true;continue}skip=false}if(skip||(!inserted&&/^\\s*(model|model_provider|model_reasoning_effort)\\s*=/.test(line)))continue;out.push(line)}if(!inserted){if(out.length)out.push("");out.push(...root)}while(out.length&&!out[out.length-1])out.pop();out.push("","[model_providers.config-studio]",'name = "Config Studio Gateway"',"base_url = "+JSON.stringify(b),"experimental_bearer_token = "+JSON.stringify(k),'wire_api = "responses"');s=out.join("\\n")+"\\n"}else{let x={};try{x=JSON.parse(s)}catch(_){}if(!x||Array.isArray(x)||typeof x!=="object")x={};if(c==="claude"){x.env=Object.assign({},x.env,{ANTHROPIC_BASE_URL:b,ANTHROPIC_AUTH_TOKEN:k,ANTHROPIC_MODEL:m,CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY:"1"});x.model=m;x.effortLevel="medium";x.modelSettings=Object.assign({},x.modelSettings);x.modelSettings[m]=Object.assign({},x.modelSettings[m],{effortLevel:"medium"})}else{x.$schema="https://opencode.ai/config.json";x.model="config-studio/"+m;x.provider=Object.assign({},x.provider);const provider=Object.assign({},x.provider["config-studio"],{npm:"@ai-sdk/openai-compatible",name:"Config Studio Gateway"});provider.options=Object.assign({},provider.options,{baseURL:b,apiKey:k});provider.models=Object.assign({},provider.models);provider.models[m]=Object.assign({},provider.models[m],{name:m});provider.models[m].options=Object.assign({},provider.models[m].options,{reasoningEffort:"medium"});x.provider["config-studio"]=provider}s=JSON.stringify(x,null,2)+"\\n"} $(s).writeToFileAtomicallyEncodingError(p,true,$.NSUTF8StringEncoding,null);`;
 
 function selectedPythonSetupScript(client) {
   const path = JSON.stringify({
@@ -125,20 +135,20 @@ function selectedPythonSetupScript(client) {
 h=pathlib.Path.home();p=h/${path};b=os.environ["HC_BASE"];k=os.environ["HC_KEY"];m=os.environ["HC_MODEL"]`;
 
   if (client === "aider") return `${prelude}
-s=p.read_text() if p.exists() else "";lines=[x for x in s.splitlines() if not x.startswith(("openai-api-base:","openai-api-key:","model:"))]
+s=p.read_text() if p.exists() else "";lines=[x for x in s.splitlines() if not x.startswith(("openai-api-base:","openai-api-key:","model:","reasoning-effort:"))]
 while lines and not lines[-1]:lines.pop()
 if lines:lines.append("")
-lines += ["openai-api-base: "+json.dumps(b),"openai-api-key: "+json.dumps(k),"model: "+json.dumps(m)];p.write_text("\\n".join(lines)+"\\n")`;
+lines += ["openai-api-base: "+json.dumps(b),"openai-api-key: "+json.dumps(k),"model: "+json.dumps(m),'reasoning-effort: "medium"'];p.write_text("\\n".join(lines)+"\\n")`;
 
   if (client === "codex") return `${prelude}
-s=p.read_text() if p.exists() else "";out=[];skip=False;inserted=False;root=["model = "+json.dumps(m),'model_provider = "config-studio"']
+s=p.read_text() if p.exists() else "";out=[];skip=False;inserted=False;root=["model = "+json.dumps(m),'model_provider = "config-studio"','model_reasoning_effort = "medium"']
 for line in s.splitlines():
  t=line.strip()
  if t.startswith("[") and t.endswith("]"):
   if not inserted:out.extend(root+[""]);inserted=True
   if t=="[model_providers.config-studio]":skip=True;continue
   skip=False
- if skip or (not inserted and re.match(r"^\\s*(model|model_provider)\\s*=",line)):continue
+ if skip or (not inserted and re.match(r"^\\s*(model|model_provider|model_reasoning_effort)\\s*=",line)):continue
  out.append(line)
 if not inserted:out.extend(([""] if out else [])+root)
 while out and not out[-1]:out.pop()
@@ -148,13 +158,13 @@ out += ["","[model_providers.config-studio]",'name = "Config Studio Gateway"',"b
 try:x=json.loads(p.read_text())
 except Exception:x={}
 if not isinstance(x,dict):x={}
-x["env"]={**(x.get("env") if isinstance(x.get("env"),dict) else {}),"ANTHROPIC_BASE_URL":b,"ANTHROPIC_AUTH_TOKEN":k,"ANTHROPIC_MODEL":m,"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY":"1"};x["model"]=m;p.write_text(json.dumps(x,indent=2)+"\\n")`;
+x["env"]={**(x.get("env") if isinstance(x.get("env"),dict) else {}),"ANTHROPIC_BASE_URL":b,"ANTHROPIC_AUTH_TOKEN":k,"ANTHROPIC_MODEL":m,"CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY":"1"};x["model"]=m;x["effortLevel"]="medium";ms=x.get("modelSettings") if isinstance(x.get("modelSettings"),dict) else {};me=ms.get(m) if isinstance(ms.get(m),dict) else {};me["effortLevel"]="medium";ms[m]=me;x["modelSettings"]=ms;p.write_text(json.dumps(x,indent=2)+"\\n")`;
 
   return `${prelude}
 try:x=json.loads(p.read_text())
 except Exception:x={}
 if not isinstance(x,dict):x={}
-x["$schema"]="https://opencode.ai/config.json";x["model"]="config-studio/"+m;providers=x.get("provider") if isinstance(x.get("provider"),dict) else {};provider=providers.get("config-studio") if isinstance(providers.get("config-studio"),dict) else {};provider.update(npm="@ai-sdk/openai-compatible",name="Config Studio Gateway");options=provider.get("options") if isinstance(provider.get("options"),dict) else {};options.update(baseURL=b,apiKey=k);provider["options"]=options;models=provider.get("models") if isinstance(provider.get("models"),dict) else {};entry=models.get(m) if isinstance(models.get(m),dict) else {};entry["name"]=m;models[m]=entry;provider["models"]=models;providers["config-studio"]=provider;x["provider"]=providers;p.write_text(json.dumps(x,indent=2)+"\\n")`;
+x["$schema"]="https://opencode.ai/config.json";x["model"]="config-studio/"+m;providers=x.get("provider") if isinstance(x.get("provider"),dict) else {};provider=providers.get("config-studio") if isinstance(providers.get("config-studio"),dict) else {};provider.update(npm="@ai-sdk/openai-compatible",name="Config Studio Gateway");options=provider.get("options") if isinstance(provider.get("options"),dict) else {};options.update(baseURL=b,apiKey=k);provider["options"]=options;models=provider.get("models") if isinstance(provider.get("models"),dict) else {};entry=models.get(m) if isinstance(models.get(m),dict) else {};entry["name"]=m;entry["options"]={**(entry.get("options") if isinstance(entry.get("options"),dict) else {}),"reasoningEffort":"medium"};models[m]=entry;provider["models"]=models;providers["config-studio"]=provider;x["provider"]=providers;p.write_text(json.dumps(x,indent=2)+"\\n")`;
 }
 
 function selectedPerlSetupScript(client) {
@@ -166,10 +176,10 @@ function selectedPerlSetupScript(client) {
   }[client];
   const prelude = `use strict;use warnings;use JSON::PP;my $p=$ENV{HOME}."/${path}";my($b,$k,$m)=@ENV{qw(HC_BASE HC_KEY HC_MODEL)};my $j=JSON::PP->new->utf8->pretty;`;
 
-  if (client === "aider") return `${prelude}my @l;if(open my $f,"<",$p){local $/;@l=split /\\r?\\n/,<$f>}@l=grep{!/^(?:openai-api-base|openai-api-key|model):/}@l;pop @l while @l&&$l[-1] eq "";push @l,"" if @l;my $q=JSON::PP->new->allow_nonref;push @l,"openai-api-base: ".$q->encode($b),"openai-api-key: ".$q->encode($k),"model: ".$q->encode($m);open my $f,">",$p or die $!;print $f join("\\n",@l),"\\n";`;
-  if (client === "codex") return `${prelude}my @l;if(open my $f,"<",$p){local $/;@l=split /\\r?\\n/,<$f>}my(@o,$skip,$inserted);my @root=('model = '.JSON::PP->new->allow_nonref->encode($m),'model_provider = "config-studio"');for my $line(@l){(my $s=$line)=~s/^\\s+|\\s+$//g;if($s=~/^\\[.*\\]$/){if(!$inserted){push @o,@root,"";$inserted=1}if($s eq '[model_providers.config-studio]'){$skip=1;next}$skip=0}next if $skip||(!$inserted&&$line=~/^\\s*(?:model|model_provider)\\s*=/);push @o,$line}push @o,(scalar(@o)?"":()),@root unless $inserted;pop @o while @o&&$o[-1] eq "";my $q=JSON::PP->new->allow_nonref;push @o,"",'[model_providers.config-studio]','name = "Config Studio Gateway"','base_url = '.$q->encode($b),'experimental_bearer_token = '.$q->encode($k),'wire_api = "responses"';open my $f,">",$p or die $!;print $f join("\\n",@o),"\\n";`;
-  if (client === "claude") return `${prelude}my $x={};if(open my $f,"<",$p){local $/;my $v=eval{$j->decode(<$f>)};$x=$v if ref($v) eq "HASH"}$x->{env}={} unless ref($x->{env}) eq "HASH";@{$x->{env}}{qw(ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY)}=($b,$k,$m,"1");$x->{model}=$m;open my $f,">",$p or die $!;print $f $j->encode($x);`;
-  return `${prelude}my $x={};if(open my $f,"<",$p){local $/;my $v=eval{$j->decode(<$f>)};$x=$v if ref($v) eq "HASH"}$x->{'$schema'}="https://opencode.ai/config.json";$x->{model}="config-studio/$m";$x->{provider}={} unless ref($x->{provider}) eq "HASH";my $v=$x->{provider}{'config-studio'};$v={} unless ref($v) eq "HASH";$v->{npm}="\\@ai-sdk/openai-compatible";$v->{name}="Config Studio Gateway";$v->{options}={} unless ref($v->{options}) eq "HASH";@{$v->{options}}{qw(baseURL apiKey)}=($b,$k);$v->{models}={} unless ref($v->{models}) eq "HASH";$v->{models}{$m}={} unless ref($v->{models}{$m}) eq "HASH";$v->{models}{$m}{name}=$m;$x->{provider}{'config-studio'}=$v;open my $f,">",$p or die $!;print $f $j->encode($x);`;
+  if (client === "aider") return `${prelude}my @l;if(open my $f,"<",$p){local $/;@l=split /\\r?\\n/,<$f>}@l=grep{!/^(?:openai-api-base|openai-api-key|model|reasoning-effort):/}@l;pop @l while @l&&$l[-1] eq "";push @l,"" if @l;my $q=JSON::PP->new->allow_nonref;push @l,"openai-api-base: ".$q->encode($b),"openai-api-key: ".$q->encode($k),"model: ".$q->encode($m),'reasoning-effort: "medium"';open my $f,">",$p or die $!;print $f join("\\n",@l),"\\n";`;
+  if (client === "codex") return `${prelude}my @l;if(open my $f,"<",$p){local $/;@l=split /\\r?\\n/,<$f>}my(@o,$skip,$inserted);my @root=('model = '.JSON::PP->new->allow_nonref->encode($m),'model_provider = "config-studio"','model_reasoning_effort = "medium"');for my $line(@l){(my $s=$line)=~s/^\\s+|\\s+$//g;if($s=~/^\\[.*\\]$/){if(!$inserted){push @o,@root,"";$inserted=1}if($s eq '[model_providers.config-studio]'){$skip=1;next}$skip=0}next if $skip||(!$inserted&&$line=~/^\\s*(?:model|model_provider|model_reasoning_effort)\\s*=/);push @o,$line}push @o,(scalar(@o)?"":()),@root unless $inserted;pop @o while @o&&$o[-1] eq "";my $q=JSON::PP->new->allow_nonref;push @o,"",'[model_providers.config-studio]','name = "Config Studio Gateway"','base_url = '.$q->encode($b),'experimental_bearer_token = '.$q->encode($k),'wire_api = "responses"';open my $f,">",$p or die $!;print $f join("\\n",@o),"\\n";`;
+  if (client === "claude") return `${prelude}my $x={};if(open my $f,"<",$p){local $/;my $v=eval{$j->decode(<$f>)};$x=$v if ref($v) eq "HASH"}$x->{env}={} unless ref($x->{env}) eq "HASH";@{$x->{env}}{qw(ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY)}=($b,$k,$m,"1");$x->{model}=$m;$x->{effortLevel}="medium";$x->{modelSettings}={} unless ref($x->{modelSettings}) eq "HASH";$x->{modelSettings}{$m}={} unless ref($x->{modelSettings}{$m}) eq "HASH";$x->{modelSettings}{$m}{effortLevel}="medium";open my $f,">",$p or die $!;print $f $j->encode($x);`;
+  return `${prelude}my $x={};if(open my $f,"<",$p){local $/;my $v=eval{$j->decode(<$f>)};$x=$v if ref($v) eq "HASH"}$x->{'$schema'}="https://opencode.ai/config.json";$x->{model}="config-studio/$m";$x->{provider}={} unless ref($x->{provider}) eq "HASH";my $v=$x->{provider}{'config-studio'};$v={} unless ref($v) eq "HASH";$v->{npm}="\\@ai-sdk/openai-compatible";$v->{name}="Config Studio Gateway";$v->{options}={} unless ref($v->{options}) eq "HASH";@{$v->{options}}{qw(baseURL apiKey)}=($b,$k);$v->{models}={} unless ref($v->{models}) eq "HASH";$v->{models}{$m}={} unless ref($v->{models}{$m}) eq "HASH";$v->{models}{$m}{name}=$m;$v->{models}{$m}{options}={} unless ref($v->{models}{$m}{options}) eq "HASH";$v->{models}{$m}{options}{reasoningEffort}="medium";$x->{provider}{'config-studio'}=$v;open my $f,">",$p or die $!;print $f $j->encode($x);`;
 }
 
 function selectedMacSetupScript(client) {
@@ -182,10 +192,10 @@ function selectedMacSetupScript(client) {
   const prelude = `ObjC.import("Foundation");const e=$.NSProcessInfo.processInfo.environment,v=n=>ObjC.unwrap(e.objectForKey(n)),p=v("HOME")+"/${path}",b=v("HC_BASE"),k=v("HC_KEY"),m=v("HC_MODEL");let s="";try{s=ObjC.unwrap($.NSString.stringWithContentsOfFileEncodingError(p,$.NSUTF8StringEncoding,null))||""}catch(_){};`;
   const write = `$(s).writeToFileAtomicallyEncodingError(p,true,$.NSUTF8StringEncoding,null);`;
 
-  if (client === "aider") return `${prelude}let l=s.split(/\\r?\\n/).filter(x=>!(/^(openai-api-base|openai-api-key|model):/.test(x)));while(l.length&&!l[l.length-1])l.pop();if(l.length)l.push("");l.push("openai-api-base: "+JSON.stringify(b),"openai-api-key: "+JSON.stringify(k),"model: "+JSON.stringify(m));s=l.join("\\n")+"\\n";${write}`;
-  if (client === "codex") return `${prelude}let o=[],skip=false,inserted=false,root=["model = "+JSON.stringify(m),'model_provider = "config-studio"'];for(const line of s.split(/\\r?\\n/)){const t=line.trim();if(t.startsWith("[")&&t.endsWith("]")){if(!inserted){o.push(...root,"");inserted=true}if(t==="[model_providers.config-studio]"){skip=true;continue}skip=false}if(skip||(!inserted&&/^\\s*(model|model_provider)\\s*=/.test(line)))continue;o.push(line)}if(!inserted){if(o.length)o.push("");o.push(...root)}while(o.length&&!o[o.length-1])o.pop();o.push("","[model_providers.config-studio]",'name = "Config Studio Gateway"',"base_url = "+JSON.stringify(b),"experimental_bearer_token = "+JSON.stringify(k),'wire_api = "responses"');s=o.join("\\n")+"\\n";${write}`;
-  if (client === "claude") return `${prelude}let x={};try{x=JSON.parse(s)}catch(_){}if(!x||Array.isArray(x)||typeof x!=="object")x={};x.env=Object.assign({},x.env,{ANTHROPIC_BASE_URL:b,ANTHROPIC_AUTH_TOKEN:k,ANTHROPIC_MODEL:m,CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY:"1"});x.model=m;s=JSON.stringify(x,null,2)+"\\n";${write}`;
-  return `${prelude}let x={};try{x=JSON.parse(s)}catch(_){}if(!x||Array.isArray(x)||typeof x!=="object")x={};x.$schema="https://opencode.ai/config.json";x.model="config-studio/"+m;x.provider=Object.assign({},x.provider);const q=Object.assign({},x.provider["config-studio"],{npm:"@ai-sdk/openai-compatible",name:"Config Studio Gateway"});q.options=Object.assign({},q.options,{baseURL:b,apiKey:k});q.models=Object.assign({},q.models);q.models[m]=Object.assign({},q.models[m],{name:m});x.provider["config-studio"]=q;s=JSON.stringify(x,null,2)+"\\n";${write}`;
+  if (client === "aider") return `${prelude}let l=s.split(/\\r?\\n/).filter(x=>!(/^(openai-api-base|openai-api-key|model|reasoning-effort):/.test(x)));while(l.length&&!l[l.length-1])l.pop();if(l.length)l.push("");l.push("openai-api-base: "+JSON.stringify(b),"openai-api-key: "+JSON.stringify(k),"model: "+JSON.stringify(m),'reasoning-effort: "medium"');s=l.join("\\n")+"\\n";${write}`;
+  if (client === "codex") return `${prelude}let o=[],skip=false,inserted=false,root=["model = "+JSON.stringify(m),'model_provider = "config-studio"','model_reasoning_effort = "medium"'];for(const line of s.split(/\\r?\\n/)){const t=line.trim();if(t.startsWith("[")&&t.endsWith("]")){if(!inserted){o.push(...root,"");inserted=true}if(t==="[model_providers.config-studio]"){skip=true;continue}skip=false}if(skip||(!inserted&&/^\\s*(model|model_provider|model_reasoning_effort)\\s*=/.test(line)))continue;o.push(line)}if(!inserted){if(o.length)o.push("");o.push(...root)}while(o.length&&!o[o.length-1])o.pop();o.push("","[model_providers.config-studio]",'name = "Config Studio Gateway"',"base_url = "+JSON.stringify(b),"experimental_bearer_token = "+JSON.stringify(k),'wire_api = "responses"');s=o.join("\\n")+"\\n";${write}`;
+  if (client === "claude") return `${prelude}let x={};try{x=JSON.parse(s)}catch(_){}if(!x||Array.isArray(x)||typeof x!=="object")x={};x.env=Object.assign({},x.env,{ANTHROPIC_BASE_URL:b,ANTHROPIC_AUTH_TOKEN:k,ANTHROPIC_MODEL:m,CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY:"1"});x.model=m;x.effortLevel="medium";x.modelSettings=Object.assign({},x.modelSettings);x.modelSettings[m]=Object.assign({},x.modelSettings[m],{effortLevel:"medium"});s=JSON.stringify(x,null,2)+"\\n";${write}`;
+  return `${prelude}let x={};try{x=JSON.parse(s)}catch(_){}if(!x||Array.isArray(x)||typeof x!=="object")x={};x.$schema="https://opencode.ai/config.json";x.model="config-studio/"+m;x.provider=Object.assign({},x.provider);const q=Object.assign({},x.provider["config-studio"],{npm:"@ai-sdk/openai-compatible",name:"Config Studio Gateway"});q.options=Object.assign({},q.options,{baseURL:b,apiKey:k});q.models=Object.assign({},q.models);q.models[m]=Object.assign({},q.models[m],{name:m});q.models[m].options=Object.assign({},q.models[m].options,{reasoningEffort:"medium"});x.provider["config-studio"]=q;s=JSON.stringify(x,null,2)+"\\n";${write}`;
 }
 
 function unixPermanentCommand(client, values, directory, configPath) {
@@ -332,6 +342,7 @@ function temporaryCommandParts(platform, values) {
       `model_providers.config-studio.base_url=${JSON.stringify(baseUrl)}`,
       'model_providers.config-studio.env_key="OPENAI_API_KEY"',
       'model_providers.config-studio.wire_api="responses"',
+      'model_reasoning_effort="medium"',
     ];
     const args = overrides.map((value) => `-c ${quote(value)}`).join(" ");
     return {
@@ -379,8 +390,8 @@ function temporaryCommandParts(platform, values) {
     target: {
       name: "Aider",
       executable: "aider",
-      unix: 'aider --model "$AIDER_MODEL"',
-      windows: "aider --model $env:AIDER_MODEL",
+      unix: 'aider --model "$AIDER_MODEL" --reasoning-effort medium',
+      windows: "aider --model $env:AIDER_MODEL --reasoning-effort medium",
     },
   };
 }
@@ -391,7 +402,7 @@ function claudeUnixCommand({ baseUrl, apiKey, model }) {
 
 function claudeWindowsCommand({ baseUrl, apiKey, model }) {
   const normalizedBaseUrl = normalizeClaudeBaseUrl(baseUrl);
-  return `${powershellValueDeclarations({ baseUrl: normalizedBaseUrl, apiKey, model })}; $configDir = Join-Path $HOME '.claude'; $config = Join-Path $configDir 'settings.json'; New-Item -ItemType Directory -Force -Path $configDir | Out-Null; if (Test-Path $config) { Copy-Item $config "$config.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')" }; $data = [PSCustomObject]@{}; if (Test-Path $config) { try { $data = Get-Content $config -Raw | ConvertFrom-Json } catch {} }; if (-not ($data.PSObject.Properties['env'])) { $data | Add-Member -MemberType NoteProperty -Name 'env' -Value ([PSCustomObject]@{}) -Force }; $data.env | Add-Member -MemberType NoteProperty -Name 'ANTHROPIC_BASE_URL' -Value $baseUrl -Force; $data.env | Add-Member -MemberType NoteProperty -Name 'ANTHROPIC_AUTH_TOKEN' -Value $apiKey -Force; $data.env | Add-Member -MemberType NoteProperty -Name 'ANTHROPIC_MODEL' -Value $model -Force; $data.env | Add-Member -MemberType NoteProperty -Name 'CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY' -Value '1' -Force; $data | Add-Member -MemberType NoteProperty -Name 'model' -Value $model -Force; $data | ConvertTo-Json -Depth 10 | Set-Content -Path $config -Encoding UTF8`;
+  return `${powershellValueDeclarations({ baseUrl: normalizedBaseUrl, apiKey, model })}; $configDir = Join-Path $HOME '.claude'; $config = Join-Path $configDir 'settings.json'; New-Item -ItemType Directory -Force -Path $configDir | Out-Null; if (Test-Path $config) { Copy-Item $config "$config.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')" }; $data = [PSCustomObject]@{}; if (Test-Path $config) { try { $data = Get-Content $config -Raw | ConvertFrom-Json } catch {} }; if (-not ($data.PSObject.Properties['env'])) { $data | Add-Member -MemberType NoteProperty -Name 'env' -Value ([PSCustomObject]@{}) -Force }; $data.env | Add-Member -MemberType NoteProperty -Name 'ANTHROPIC_BASE_URL' -Value $baseUrl -Force; $data.env | Add-Member -MemberType NoteProperty -Name 'ANTHROPIC_AUTH_TOKEN' -Value $apiKey -Force; $data.env | Add-Member -MemberType NoteProperty -Name 'ANTHROPIC_MODEL' -Value $model -Force; $data.env | Add-Member -MemberType NoteProperty -Name 'CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY' -Value '1' -Force; $data | Add-Member -MemberType NoteProperty -Name 'model' -Value $model -Force; $data | Add-Member -MemberType NoteProperty -Name 'effortLevel' -Value 'medium' -Force; if (-not ($data.PSObject.Properties['modelSettings'])) { $data | Add-Member -MemberType NoteProperty -Name 'modelSettings' -Value ([PSCustomObject]@{}) -Force }; $data.modelSettings | Add-Member -MemberType NoteProperty -Name $model -Value ([PSCustomObject]@{ effortLevel = 'medium' }) -Force; $data | ConvertTo-Json -Depth 10 | Set-Content -Path $config -Encoding UTF8`;
 }
 
 // ============================================================================
@@ -404,7 +415,7 @@ function codexUnixCommand({ baseUrl, apiKey, model }) {
 
 function codexWindowsCommand({ baseUrl, apiKey, model }) {
   const normalizedBaseUrl = normalizeGatewayBaseUrl(baseUrl);
-  return `${powershellValueDeclarations({ baseUrl: normalizedBaseUrl, apiKey, model })}; $configDir = Join-Path $HOME '.codex'; $config = Join-Path $configDir 'config.toml'; New-Item -ItemType Directory -Force -Path $configDir | Out-Null; if (Test-Path $config) { Copy-Item $config "$config.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"; $lines = @(Get-Content $config) } else { $lines = @() }; $out = [Collections.Generic.List[string]]::new(); $inserted = $false; $skipping = $false; $root = @('model = ' + ($model | ConvertTo-Json -Compress), 'model_provider = "config-studio"'); foreach ($line in $lines) { $trimmed = $line.Trim(); if ($trimmed.StartsWith('[') -and $trimmed.EndsWith(']')) { if (-not $inserted) { foreach ($item in $root) { $out.Add($item) }; $out.Add(''); $inserted = $true }; if ($trimmed -eq '[model_providers.config-studio]') { $skipping = $true; continue }; $skipping = $false }; if ($skipping -or ((-not $inserted) -and $line -match '^\\s*(model|model_provider)\\s*=')) { continue }; $out.Add($line) }; if (-not $inserted) { if ($out.Count) { $out.Add('') }; foreach ($item in $root) { $out.Add($item) } }; while ($out.Count -and -not $out[$out.Count - 1]) { $out.RemoveAt($out.Count - 1) }; $out.Add(''); $out.Add('[model_providers.config-studio]'); $out.Add('name = "Config Studio Gateway"'); $out.Add('base_url = ' + ($baseUrl | ConvertTo-Json -Compress)); $out.Add('experimental_bearer_token = ' + ($apiKey | ConvertTo-Json -Compress)); $out.Add('wire_api = "responses"'); $out | Set-Content -Path $config -Encoding UTF8`;
+  return `${powershellValueDeclarations({ baseUrl: normalizedBaseUrl, apiKey, model })}; $configDir = Join-Path $HOME '.codex'; $config = Join-Path $configDir 'config.toml'; New-Item -ItemType Directory -Force -Path $configDir | Out-Null; if (Test-Path $config) { Copy-Item $config "$config.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"; $lines = @(Get-Content $config) } else { $lines = @() }; $out = [Collections.Generic.List[string]]::new(); $inserted = $false; $skipping = $false; $root = @('model = ' + ($model | ConvertTo-Json -Compress), 'model_provider = "config-studio"', 'model_reasoning_effort = "medium"'); foreach ($line in $lines) { $trimmed = $line.Trim(); if ($trimmed.StartsWith('[') -and $trimmed.EndsWith(']')) { if (-not $inserted) { foreach ($item in $root) { $out.Add($item) }; $out.Add(''); $inserted = $true }; if ($trimmed -eq '[model_providers.config-studio]') { $skipping = $true; continue }; $skipping = $false }; if ($skipping -or ((-not $inserted) -and $line -match '^\\s*(model|model_provider|model_reasoning_effort)\\s*=')) { continue }; $out.Add($line) }; if (-not $inserted) { if ($out.Count) { $out.Add('') }; foreach ($item in $root) { $out.Add($item) } }; while ($out.Count -and -not $out[$out.Count - 1]) { $out.RemoveAt($out.Count - 1) }; $out.Add(''); $out.Add('[model_providers.config-studio]'); $out.Add('name = "Config Studio Gateway"'); $out.Add('base_url = ' + ($baseUrl | ConvertTo-Json -Compress)); $out.Add('experimental_bearer_token = ' + ($apiKey | ConvertTo-Json -Compress)); $out.Add('wire_api = "responses"'); $out | Set-Content -Path $config -Encoding UTF8`;
 }
 
 // ============================================================================
@@ -419,7 +430,7 @@ function aiderWindowsCommand({ baseUrl, apiKey, model }) {
   const normalizedBaseUrl = normalizeGatewayBaseUrl(baseUrl);
   const modelName = model.startsWith("openai/") ? model : `openai/${model}`;
 
-  return `${powershellValueDeclarations({ baseUrl: normalizedBaseUrl, apiKey, model: modelName })}; $config = Join-Path $HOME '.aider.conf.yml'; if (Test-Path $config) { Copy-Item $config "$config.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"; $lines = @(Get-Content $config | Where-Object { $_ -notmatch '^(openai-api-base|openai-api-key|model):' }) } else { $lines = @() }; $yaml = @('openai-api-base: ' + ($baseUrl | ConvertTo-Json -Compress), 'openai-api-key: ' + ($apiKey | ConvertTo-Json -Compress), 'model: ' + ($model | ConvertTo-Json -Compress)); @($lines + $yaml) | Set-Content $config -Encoding UTF8`;
+  return `${powershellValueDeclarations({ baseUrl: normalizedBaseUrl, apiKey, model: modelName })}; $config = Join-Path $HOME '.aider.conf.yml'; if (Test-Path $config) { Copy-Item $config "$config.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')"; $lines = @(Get-Content $config | Where-Object { $_ -notmatch '^(openai-api-base|openai-api-key|model|reasoning-effort):' }) } else { $lines = @() }; $yaml = @('openai-api-base: ' + ($baseUrl | ConvertTo-Json -Compress), 'openai-api-key: ' + ($apiKey | ConvertTo-Json -Compress), 'model: ' + ($model | ConvertTo-Json -Compress), 'reasoning-effort: "medium"'); @($lines + $yaml) | Set-Content $config -Encoding UTF8`;
 }
 
 // ============================================================================
@@ -432,7 +443,7 @@ function opencodeUnixCommand({ baseUrl, apiKey, model }) {
 
 function opencodeWindowsCommand({ baseUrl, apiKey, model }) {
   const normalizedBaseUrl = normalizeGatewayBaseUrl(baseUrl);
-  return `${powershellValueDeclarations({ baseUrl: normalizedBaseUrl, apiKey, model })}; $configDir = Join-Path $HOME '.config\\opencode'; $config = Join-Path $configDir 'opencode.json'; New-Item -ItemType Directory -Force -Path $configDir | Out-Null; if (Test-Path $config) { Copy-Item $config "$config.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')" }; $data = [PSCustomObject]@{}; if (Test-Path $config) { try { $data = Get-Content $config -Raw | ConvertFrom-Json } catch {} }; $data | Add-Member -MemberType NoteProperty -Name '$schema' -Value 'https://opencode.ai/config.json' -Force; $data | Add-Member -MemberType NoteProperty -Name 'model' -Value ("config-studio/$model") -Force; if (-not ($data.PSObject.Properties['provider'])) { $data | Add-Member -MemberType NoteProperty -Name 'provider' -Value ([PSCustomObject]@{}) -Force }; if (-not ($data.provider.PSObject.Properties['config-studio'])) { $data.provider | Add-Member -MemberType NoteProperty -Name 'config-studio' -Value ([PSCustomObject]@{}) -Force }; $provider = $data.provider.'config-studio'; $provider | Add-Member -MemberType NoteProperty -Name 'npm' -Value '@ai-sdk/openai-compatible' -Force; $provider | Add-Member -MemberType NoteProperty -Name 'name' -Value 'Config Studio Gateway' -Force; if (-not ($provider.PSObject.Properties['options'])) { $provider | Add-Member -MemberType NoteProperty -Name 'options' -Value ([PSCustomObject]@{}) -Force }; $provider.options | Add-Member -MemberType NoteProperty -Name 'baseURL' -Value $baseUrl -Force; $provider.options | Add-Member -MemberType NoteProperty -Name 'apiKey' -Value $apiKey -Force; if (-not ($provider.PSObject.Properties['models'])) { $provider | Add-Member -MemberType NoteProperty -Name 'models' -Value ([PSCustomObject]@{}) -Force }; $provider.models | Add-Member -MemberType NoteProperty -Name $model -Value ([PSCustomObject]@{ name = $model }) -Force; $data | ConvertTo-Json -Depth 20 | Set-Content -Path $config -Encoding UTF8`;
+  return `${powershellValueDeclarations({ baseUrl: normalizedBaseUrl, apiKey, model })}; $configDir = Join-Path $HOME '.config\\opencode'; $config = Join-Path $configDir 'opencode.json'; New-Item -ItemType Directory -Force -Path $configDir | Out-Null; if (Test-Path $config) { Copy-Item $config "$config.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')" }; $data = [PSCustomObject]@{}; if (Test-Path $config) { try { $data = Get-Content $config -Raw | ConvertFrom-Json } catch {} }; $data | Add-Member -MemberType NoteProperty -Name '$schema' -Value 'https://opencode.ai/config.json' -Force; $data | Add-Member -MemberType NoteProperty -Name 'model' -Value ("config-studio/$model") -Force; if (-not ($data.PSObject.Properties['provider'])) { $data | Add-Member -MemberType NoteProperty -Name 'provider' -Value ([PSCustomObject]@{}) -Force }; if (-not ($data.provider.PSObject.Properties['config-studio'])) { $data.provider | Add-Member -MemberType NoteProperty -Name 'config-studio' -Value ([PSCustomObject]@{}) -Force }; $provider = $data.provider.'config-studio'; $provider | Add-Member -MemberType NoteProperty -Name 'npm' -Value '@ai-sdk/openai-compatible' -Force; $provider | Add-Member -MemberType NoteProperty -Name 'name' -Value 'Config Studio Gateway' -Force; if (-not ($provider.PSObject.Properties['options'])) { $provider | Add-Member -MemberType NoteProperty -Name 'options' -Value ([PSCustomObject]@{}) -Force }; $provider.options | Add-Member -MemberType NoteProperty -Name 'baseURL' -Value $baseUrl -Force; $provider.options | Add-Member -MemberType NoteProperty -Name 'apiKey' -Value $apiKey -Force; if (-not ($provider.PSObject.Properties['models'])) { $provider | Add-Member -MemberType NoteProperty -Name 'models' -Value ([PSCustomObject]@{}) -Force }; $provider.models | Add-Member -MemberType NoteProperty -Name $model -Value ([PSCustomObject]@{ name = $model; options = [PSCustomObject]@{ reasoningEffort = 'medium' } }) -Force; $data | ConvertTo-Json -Depth 20 | Set-Content -Path $config -Encoding UTF8`;
 }
 
 // ============================================================================
@@ -500,39 +511,90 @@ export const configPaths = {
 };
 
 /**
- * Rollback commands to restore the latest backup for each client.
+ * Clients that can be restored, with the paths each restore command touches.
  */
-export const revertCommands = {
+const restoreTargets = {
   claude: {
-    unix:
-      'latest=$(ls -t "$HOME"/.claude/settings.json.bak-* 2>/dev/null | head -n 1) && [ -n "$latest" ] && cp "$latest" "$HOME/.claude/settings.json"',
-    windows:
-      "$config = Join-Path $HOME '.claude\\settings.json'; $latest = Get-ChildItem \"$config.bak-*\" | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($latest) { Copy-Item $latest.FullName $config -Force }",
+    name: "Claude Code",
+    unixPath: "$HOME/.claude/settings.json",
+    unixDisplay: "~/.claude/settings.json",
+    windowsPath: ".claude\\settings.json",
+    windowsDisplay: "$HOME\\.claude\\settings.json",
+    fileName: "settings.json",
   },
   codex: {
-    unix:
-      'latest=$(ls -t "$HOME"/.codex/config.toml.bak-* 2>/dev/null | head -n 1) && [ -n "$latest" ] && cp "$latest" "$HOME/.codex/config.toml"',
-    windows:
-      "$config = Join-Path $HOME '.codex\\config.toml'; $latest = Get-ChildItem \"$config.bak-*\" | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($latest) { Copy-Item $latest.FullName $config -Force }",
+    name: "Codex CLI",
+    unixPath: "$HOME/.codex/config.toml",
+    unixDisplay: "~/.codex/config.toml",
+    windowsPath: ".codex\\config.toml",
+    windowsDisplay: "$HOME\\.codex\\config.toml",
+    fileName: "config.toml",
   },
   aider: {
-    unix:
-      'latest=$(ls -t "$HOME"/.aider.conf.yml.bak-* 2>/dev/null | head -n 1) && [ -n "$latest" ] && cp "$latest" "$HOME/.aider.conf.yml"',
-    windows:
-      "$config = Join-Path $HOME '.aider.conf.yml'; $latest = Get-ChildItem \"$config.bak-*\" | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($latest) { Copy-Item $latest.FullName $config -Force }",
+    name: "Aider",
+    unixPath: "$HOME/.aider.conf.yml",
+    unixDisplay: "~/.aider.conf.yml",
+    windowsPath: ".aider.conf.yml",
+    windowsDisplay: "$HOME\\.aider.conf.yml",
+    fileName: ".aider.conf.yml",
   },
   opencode: {
-    unix:
-      'latest=$(ls -t "$HOME"/.config/opencode/opencode.json.bak-* 2>/dev/null | head -n 1) && [ -n "$latest" ] && cp "$latest" "$HOME/.config/opencode/opencode.json"',
-    windows:
-      "$config = Join-Path $HOME '.config\\opencode\\opencode.json'; $latest = Get-ChildItem \"$config.bak-*\" | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($latest) { Copy-Item $latest.FullName $config -Force }",
+    name: "OpenCode",
+    unixPath: "$HOME/.config/opencode/opencode.json",
+    unixDisplay: "~/.config/opencode/opencode.json",
+    windowsPath: ".config\\opencode\\opencode.json",
+    windowsDisplay: "$HOME\\.config\\opencode\\opencode.json",
+    fileName: "opencode.json",
   },
-  // Backward compatibility fallback
-  unix:
-    'latest=$(ls -t "$HOME"/.claude/settings.json.bak-* 2>/dev/null | head -n 1) && [ -n "$latest" ] && cp "$latest" "$HOME/.claude/settings.json"',
-  windows:
-    "$config = Join-Path $HOME '.claude\\settings.json'; $latest = Get-ChildItem \"$config.bak-*\" | Sort-Object LastWriteTime -Descending | Select-Object -First 1; if ($latest) { Copy-Item $latest.FullName $config -Force }",
 };
+
+/**
+ * Restores the newest timestamped backup. Backup names sort chronologically, so
+ * the last match of the sorted glob is the newest one. The configuration that is
+ * about to be replaced is kept as a `.prerestore-` copy, which the `.bak-*` glob
+ * never matches, so repeating the restore stays predictable.
+ */
+function unixRestoreCommand({ name, unixPath, unixDisplay }) {
+  return `(
+config="${unixPath}"
+latest=""
+for candidate in "$config".bak-*; do
+  [ -e "$candidate" ] && latest="$candidate"
+done
+
+if [ -z "$latest" ]; then
+  printf '%s\\n' 'No backup found for ${name} (${unixDisplay}).' >&2
+  exit 1
+fi
+
+if [ -f "$config" ]; then
+  printf '%s\\n' '[1/2] Saving the current configuration before restoring.'
+  cp "$config" "$config.prerestore-$(date +%Y%m%d-%H%M%S)"
+else
+  printf '%s\\n' '[1/2] No current configuration to save.'
+fi
+
+cp "$latest" "$config"
+printf '%s\\n' "[2/2] Restored ${name} from $latest"
+)`;
+}
+
+function windowsRestoreCommand({ name, windowsPath, windowsDisplay, fileName }) {
+  return `$config = Join-Path $HOME '${windowsPath}'; $latest = Get-ChildItem -LiteralPath (Split-Path $config) -Filter '${fileName}.bak-*' -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1; if (-not $latest) { Write-Error 'No backup found for ${name} (${windowsDisplay}).' } else { if (Test-Path -LiteralPath $config) { Write-Host '[1/2] Saving the current configuration before restoring.'; Copy-Item -LiteralPath $config -Destination "$config.prerestore-$(Get-Date -Format 'yyyyMMdd-HHmmss')" -Force } else { Write-Host '[1/2] No current configuration to save.' }; Copy-Item -LiteralPath $latest.FullName -Destination $config -Force; Write-Host "[2/2] Restored ${name} from $($latest.Name)" -ForegroundColor Green }`;
+}
+
+/**
+ * Rollback commands to restore the latest backup for each client.
+ */
+export const revertCommands = Object.fromEntries([
+  ...Object.entries(restoreTargets).map(([client, target]) => [client, {
+    unix: unixRestoreCommand(target),
+    windows: windowsRestoreCommand(target),
+  }]),
+  // Backward compatibility fallback
+  ["unix", unixRestoreCommand(restoreTargets.claude)],
+  ["windows", windowsRestoreCommand(restoreTargets.claude)],
+]);
 
 /**
  * Retrieves the rollback command for a given platform and client.

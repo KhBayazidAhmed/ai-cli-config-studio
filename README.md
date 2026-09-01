@@ -83,6 +83,7 @@ Permanent commands write directly to persistent tool configuration files:
 - **Claude Code (`claude`)**: Safely merges the Anthropic gateway root, bearer token, selected model, and gateway model discovery into `~/.claude/settings.json`.
 - **Codex CLI (`codex`)**: Updates `~/.codex/config.toml` with a `config-studio` model provider using the Responses API and the selected model.
 - **OpenCode (`opencode`)**: Adds a `config-studio` OpenAI-compatible provider under `provider.config-studio` in `~/.config/opencode/opencode.json`.
+- **Default Reasoning Effort:** Every generated configuration pins a `medium` reasoning effort for every model — `effortLevel` plus a per-model `modelSettings` entry for Claude Code, `model_reasoning_effort` for Codex CLI, `reasoning-effort` for Aider, and `options.reasoningEffort` on the model for OpenCode. Temporary commands pass the same default via `-c model_reasoning_effort`, `--settings`, `--reasoning-effort`, or the generated OpenCode config.
 - **Non-Destructive:** Retains any existing user preferences, custom themes, allowed tools, and hooks.
 - **Temporary Mode:** Generates a readable command that exports session-only environment variables and immediately opens the selected CLI with the chosen model, without changing configuration files or sending an automatic prompt.
 - **No Node Setup:** End users do not need Node.js, npm, Bun, or project dependencies. Temporary macOS/Linux commands use the shell only; permanent commands automatically use Python 3, system Perl, or the built-in macOS JavaScript runtime. Windows commands use PowerShell.
@@ -92,7 +93,8 @@ Permanent commands write directly to persistent tool configuration files:
 - **Timestamped Backup:** Before updating any file, the generated command creates a backup:
   - macOS / Linux: `<config-file>.bak-$(date +%Y%m%d-%H%M%S)`
   - Windows (PowerShell): `$config.bak-$(Get-Date -Format 'yyyyMMdd-HHmmss')`
-- **Instant Restore:** A matching one-click restore command is generated in the studio to immediately revert to the latest backup.
+- **Instant Restore:** A matching one-click restore command is generated in the studio to revert to the newest backup, selected by the timestamp in the backup's file name. It prints the backup it reinstated and fails with `No backup found` when there is nothing to restore.
+- **Undoable Restore:** Before overwriting the current configuration, the restore command saves it as `<config-file>.prerestore-<timestamp>`. That copy is excluded from backup discovery, so repeating the restore is predictable.
 
 ---
 

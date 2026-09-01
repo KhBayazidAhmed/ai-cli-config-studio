@@ -267,6 +267,8 @@ describe("executable permanent configuration commands", () => {
       CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "1",
     });
     expect(config.model).toBe(hostileValues.model);
+    expect(config.effortLevel).toBe("medium");
+    expect(config.modelSettings[hostileValues.model]).toEqual({ effortLevel: "medium" });
     expect(await readdir(join(home, ".claude"))).toContainEqual(
       expect.stringMatching(/^settings\.json\.bak-\d{8}-\d{6}$/),
     );
@@ -283,6 +285,8 @@ describe("executable permanent configuration commands", () => {
     expect(updated).toContain('approval_policy = "on-request"');
     expect(updated).toContain(`model = ${JSON.stringify(hostileValues.model)}`);
     expect(updated).toContain('model_provider = "config-studio"');
+    expect(updated).toContain('model_reasoning_effort = "medium"');
+    expect(updated.match(/^model_reasoning_effort/gm)).toHaveLength(1);
     expect(updated).toContain('[model_providers.config-studio]');
     expect(updated).toContain('base_url = "https://gateway.example/v1"');
     expect(updated).toContain(`experimental_bearer_token = ${JSON.stringify(hostileValues.apiKey)}`);
@@ -290,6 +294,50 @@ describe("executable permanent configuration commands", () => {
 
     await runUnixCommand(getRevertCommand("unix", "codex"), home);
     expect(await readFile(target, "utf8")).toBe(original);
+  });
+
+  test("restore commands pick the newest backup by name, keep a pre-restore copy, and report a missing backup", async () => {
+    const clients = [
+      ["claude", ".claude/settings.json"],
+      ["codex", ".codex/config.toml"],
+      ["aider", ".aider.conf.yml"],
+      ["opencode", ".config/opencode/opencode.json"],
+    ] as const;
+
+    for (const [client, relativePath] of clients) {
+      const home = await createTemporaryHome();
+      const target = await writeHomeFile(home, relativePath, "original\n");
+      const restore = getRevertCommand("unix", client);
+
+      const missing = Bun.spawn(["/bin/sh", "-c", restore], {
+        env: { ...Bun.env, HOME: home },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const [exitCode, stderr] = await Promise.all([
+        missing.exited,
+        new Response(missing.stderr).text(),
+      ]);
+      expect(exitCode).toBe(1);
+      expect(stderr).toContain("No backup found");
+      expect(await readFile(target, "utf8")).toBe("original\n");
+
+      // Written newest-name-first so the modification times contradict the names.
+      await writeHomeFile(home, `${relativePath}.bak-20250101-000000`, "newer\n");
+      await writeHomeFile(home, `${relativePath}.bak-20240101-000000`, "older\n");
+
+      await runUnixCommand(restore, home);
+      expect(await readFile(target, "utf8")).toBe("newer\n");
+
+      const directory = join(home, dirname(relativePath));
+      const snapshot = (await readdir(directory)).find((entry) => entry.includes(".prerestore-"));
+      expect(snapshot).toMatch(/\.prerestore-\d{8}-\d{6}$/);
+      expect(await readFile(join(directory, snapshot!), "utf8")).toBe("original\n");
+
+      // The pre-restore copy must not become the next restore source.
+      await runUnixCommand(restore, home);
+      expect(await readFile(target, "utf8")).toBe("newer\n");
+    }
   });
 
   test("Aider command preserves unrelated YAML and quotes unsafe values", async () => {
@@ -303,7 +351,9 @@ describe("executable permanent configuration commands", () => {
     expect(config).toContain('openai-api-base: "https://gateway.example/v1"');
     expect(config).toContain(`openai-api-key: ${JSON.stringify(hostileValues.apiKey)}`);
     expect(config).toContain(`model: ${JSON.stringify(`openai/${hostileValues.model}`)}`);
+    expect(config).toContain('reasoning-effort: "medium"');
     expect(config.match(/^model:/gm)).toHaveLength(1);
+    expect(config.match(/^reasoning-effort:/gm)).toHaveLength(1);
   });
 
   test("OpenCode command preserves provider settings and safely stores values", async () => {
@@ -324,7 +374,10 @@ describe("executable permanent configuration commands", () => {
         apiKey: hostileValues.apiKey,
       },
       models: {
-        [hostileValues.model]: { name: hostileValues.model },
+        [hostileValues.model]: {
+          name: hostileValues.model,
+          options: { reasoningEffort: "medium" },
+        },
       },
     });
     expect(config.provider.openai).toEqual({ timeout: 30 });
@@ -448,6 +501,7 @@ describe("executable permanent configuration commands", () => {
     expect(codexArgs).toContain('model_provider="config-studio"');
     expect(codexArgs).toContain('model_providers.config-studio.base_url="https://gateway.example/v1"');
     expect(codexArgs).toContain('model_providers.config-studio.env_key="OPENAI_API_KEY"');
+    expect(codexArgs).toContain('model_reasoning_effort="medium"');
 
     await writeExecutable(home, "opencode", '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$HOME/opencode-args"\nprintf \'%s\' "$OPENCODE_CONFIG_CONTENT" > "$HOME/opencode-config"\n');
     await runUnixCommand(createTemporaryCommand("unix", { ...values, client: "opencode" }), home, bin);
@@ -457,7 +511,7 @@ describe("executable permanent configuration commands", () => {
     expect(opencodeConfig.provider["config-studio"]).toMatchObject({
       npm: "@ai-sdk/openai-compatible",
       options: { baseURL: "https://gateway.example/v1", apiKey: values.apiKey },
-      models: { [values.model]: { name: values.model } },
+      models: { [values.model]: { name: values.model, options: { reasoningEffort: "medium" } } },
     });
   });
 
@@ -485,6 +539,7 @@ describe("executable permanent configuration commands", () => {
     const config = await readFile(target, "utf8");
     expect(config).toContain('approval_policy = "never"');
     expect(config).toContain('model_provider = "config-studio"');
+    expect(config).toContain('model_reasoning_effort = "medium"');
     expect(config).toContain('[model_providers.config-studio]');
   });
 
@@ -521,6 +576,8 @@ describe("executable permanent configuration commands", () => {
         CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY: "1",
       },
       model: "test-model",
+      effortLevel: "medium",
+      modelSettings: { "test-model": { effortLevel: "medium" } },
     });
   });
 
