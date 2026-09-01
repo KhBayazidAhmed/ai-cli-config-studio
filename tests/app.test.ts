@@ -11,6 +11,7 @@ import {
 import {
   createRequestHandler,
   extractModelIds,
+  extractModels,
   isNonPublicAddress,
   sanitizeGatewayUrl,
 } from "../server";
@@ -98,6 +99,26 @@ describe("gateway validation and model discovery", () => {
     expect(requestedUrl).toBe("https://gateway.example.com/v1/models");
     expect(authorization).toBe("Bearer test-key");
     expect(await response.json()).toEqual({ models: ["a-model", "z-model"] });
+  });
+
+  test("keeps the grouping metadata a gateway reports for each model", () => {
+    expect(extractModels({
+      data: [
+        { id: "pixel-1", owned_by: "Studio", output_modalities: ["Image"] },
+        { id: "gpt-5", object: "model", category: "chat" },
+        { id: "plain-1" },
+      ],
+    })).toEqual([
+      { id: "gpt-5", category: "chat" },
+      { id: "pixel-1", owner: "studio", modalities: ["image"] },
+      { id: "plain-1" },
+    ]);
+  });
+
+  test("treats a nested provider name as the owner of its models", () => {
+    expect(extractModels({
+      providers: { anthropic: { models: [{ id: "claude-sonnet-4" }] } },
+    })).toEqual([{ id: "claude-sonnet-4", owner: "anthropic" }]);
   });
 
   test("collects every model exposed by multi-provider gateway payloads", () => {

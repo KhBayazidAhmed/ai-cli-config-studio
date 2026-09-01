@@ -44,13 +44,24 @@ const MODEL_CAPABILITIES = [
     audience: "Code, specifications, data, and implementation",
     description: "Best suited to engineering, technical product work, debugging, and structured outputs.",
   },
+  {
+    id: "media",
+    title: "Image, Audio & Video",
+    audience: "Visuals, voice, and video generation",
+    description: "Generates or understands media rather than text: pictures, speech, transcripts, and clips.",
+  },
 ];
 
 const STORAGE_KEY = "ai-cli-config-studio:form-state";
 
+// Preferred model to preselect once a catalogue loads, matched on the id.
+const DEFAULT_MODEL_PATTERN = /luna/i;
+
 const state = {
   loadedFingerprint: "",
   toastTimer: null,
+  /** Gateway-reported metadata per model id: { owner, category, modalities }. */
+  modelDetails: {},
 };
 
 // ============================================================================
@@ -109,18 +120,49 @@ function getConfigMode() {
   return elements.configModeToggle.checked ? "permanent" : "temporary";
 }
 
+// Names are only a fallback: the gateway is asked first (see `state.modelDetails`),
+// and these rules run when it reports nothing useful about a model. Ordered most
+// specific first, so "gpt-5.3-codex-spark" is code before it is "spark"-fast.
+const CAPABILITY_RULES = [
+  { id: "media", pattern: /image|video|audio|vision|voice|speech|tts|asr|t2v|i2v|r2v|t2i|diffusion|sora|veo|whisper/ },
+  { id: "research", pattern: /review|reason|deepseek-r1|(^|[\/_-])o[13]([\/_-]|$)|opus/ },
+  { id: "technical", pattern: /codex|coder|code|devstral|starcoder/ },
+  { id: "everyday", pattern: /mini|flash|haiku|luna|spark|small|fast|lite/ },
+];
+
+const MEDIA_TERMS = ["image", "audio", "video", "vision", "speech", "voice", "tts", "asr"];
+
+function titleCase(value) {
+  return value
+    .replace(/[-_/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+/**
+ * Groups a model using what the gateway said about it, falling back to its name.
+ * Returns { id, title } — `title` becomes the optgroup label.
+ */
 function getModelCapability(model) {
+  const details = state.modelDetails[model];
+  const modalities = details?.modalities ?? [];
+
+  // Anything that emits or consumes non-text output belongs with the media tools.
+  if (modalities.some((modality) => MEDIA_TERMS.some((term) => modality.includes(term)))) {
+    return MODEL_CAPABILITIES.find((group) => group.id === "media");
+  }
+
+  // A gateway that already classifies its catalogue wins outright — no keyword
+  // list can stay current with models it has never seen.
+  if (details?.category) {
+    const known = MODEL_CAPABILITIES.find((group) => group.id === details.category);
+    return known ?? { id: `category:${details.category}`, title: titleCase(details.category) };
+  }
+
   const name = model.toLowerCase();
-  if (/review|reason|deepseek-r1|(^|[\/_-])o[13]([\/_-]|$)|opus/.test(name)) {
-    return MODEL_CAPABILITIES.find((group) => group.id === "research");
-  }
-  if (/mini|flash|haiku|luna|spark|small|fast|lite/.test(name)) {
-    return MODEL_CAPABILITIES.find((group) => group.id === "everyday");
-  }
-  if (/codex|coder|code|devstral|starcoder/.test(name)) {
-    return MODEL_CAPABILITIES.find((group) => group.id === "technical");
-  }
-  return MODEL_CAPABILITIES[0];
+  const rule = CAPABILITY_RULES.find((candidate) => candidate.pattern.test(name));
+  return MODEL_CAPABILITIES.find((group) => group.id === rule?.id) ?? MODEL_CAPABILITIES[0];
 }
 
 function renderModelPicker() {
@@ -128,22 +170,69 @@ function renderModelPicker() {
   if (models.length === 0) return;
 
   const selectedModel = elements.modelSelect.value;
-  const groups = [];
+  const grouped = new Map();
 
-  for (const capability of MODEL_CAPABILITIES) {
-    const matchingModels = models.filter((model) => getModelCapability(model).id === capability.id);
-    if (matchingModels.length === 0) continue;
+  // Built in encounter order so gateway-supplied categories appear too, instead
+  // of only the four capabilities this app knows by name.
+  for (const model of models) {
+    const capability = getModelCapability(model);
+    const bucket = grouped.get(capability.id);
+    if (bucket) {
+      bucket.models.push(model);
+    } else {
+      grouped.set(capability.id, { title: capability.title, models: [model] });
+    }
+  }
 
+  const order = new Map(MODEL_CAPABILITIES.map((capability, index) => [capability.id, index]));
+  const sorted = [...grouped].sort(
+    ([left], [right]) =>
+      (order.get(left) ?? MODEL_CAPABILITIES.length) - (order.get(right) ?? MODEL_CAPABILITIES.length),
+  );
+
+  const groups = sorted.map(([, bucket]) => {
     const group = document.createElement("optgroup");
-    group.label = capability.title;
-    for (const model of matchingModels) {
+    group.label = bucket.title;
+    for (const model of bucket.models) {
       group.append(new Option(model, model));
     }
-    groups.push(group);
-  }
+    return group;
+  });
 
   elements.modelSelect.replaceChildren(...groups);
   if (models.includes(selectedModel)) elements.modelSelect.value = selectedModel;
+}
+
+/**
+ * Picks what to select for a freshly loaded catalogue: the preferred model when
+ * the gateway offers one (shortest match, so the plain id beats its variants),
+ * otherwise the first model.
+ */
+function pickDefaultModel(models) {
+  const preferred = models
+    .filter((model) => DEFAULT_MODEL_PATTERN.test(model))
+    .sort((left, right) => left.length - right.length || left.localeCompare(right));
+
+  return preferred[0] ?? models[0] ?? "";
+}
+
+/**
+ * Indexes the `details` array from /api/models by model id.
+ */
+function setModelDetails(details) {
+  state.modelDetails = {};
+  if (!Array.isArray(details)) return;
+
+  for (const entry of details) {
+    if (!entry || typeof entry !== "object" || typeof entry.id !== "string") continue;
+    state.modelDetails[entry.id] = {
+      owner: typeof entry.owner === "string" ? entry.owner : undefined,
+      category: typeof entry.category === "string" ? entry.category : undefined,
+      modalities: Array.isArray(entry.modalities)
+        ? entry.modalities.filter((modality) => typeof modality === "string")
+        : [],
+    };
+  }
 }
 
 function getStoredFormState() {
@@ -167,6 +256,7 @@ function saveFormState() {
       client: getSelectedRadioValue("client"),
       platform: getSelectedRadioValue("platform"),
       configMode: getConfigMode(),
+      modelDetails: state.modelDetails,
       model: elements.modelSelect.value,
       models,
     }));
@@ -196,6 +286,10 @@ function restoreFormState() {
     elements.configModeToggle.checked = stored.configMode === "permanent";
   }
 
+  if (stored.modelDetails && typeof stored.modelDetails === "object") {
+    state.modelDetails = stored.modelDetails;
+  }
+
   const models = Array.isArray(stored.models)
     ? stored.models.filter((model) => typeof model === "string" && model)
     : [];
@@ -204,9 +298,10 @@ function restoreFormState() {
       ...models.map((model) => new Option(model, model)),
     );
     elements.modelSelect.disabled = false;
-    if (typeof stored.model === "string" && models.includes(stored.model)) {
-      elements.modelSelect.value = stored.model;
-    }
+    elements.modelSelect.value =
+      typeof stored.model === "string" && models.includes(stored.model)
+        ? stored.model
+        : pickDefaultModel(models);
     state.loadedFingerprint = getCredentialsFingerprint();
     if (elements.modelCountHint) {
       elements.modelCountHint.textContent = `${models.length} models available`;
@@ -434,9 +529,15 @@ async function handleFetchModels(event) {
       throw new Error("The gateway returned no models.");
     }
 
+    const previousModel = elements.modelSelect.value;
+
+    setModelDetails(payload.details);
     elements.modelSelect.replaceChildren(
       ...payload.models.map((model) => new Option(model, model)),
     );
+    elements.modelSelect.value = payload.models.includes(previousModel)
+      ? previousModel
+      : pickDefaultModel(payload.models);
     elements.modelSelect.disabled = false;
     state.loadedFingerprint = getCredentialsFingerprint();
     renderModelPicker();

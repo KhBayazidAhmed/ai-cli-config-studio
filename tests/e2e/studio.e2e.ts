@@ -4,7 +4,7 @@ async function loadModels(page: Page, apiKey = "sk-e2e-secret") {
   await page.goto("/");
   await page.getByLabel("API Key").fill(apiKey);
   await page.getByRole("button", { name: "Fetch Models" }).click();
-  await expect(page.locator("#model-status")).toHaveText("3 models loaded successfully.");
+  await expect(page.locator("#model-status")).toHaveText("4 models loaded successfully.");
 }
 
 test("loads the studio in its safe initial state", async ({ page }) => {
@@ -85,6 +85,9 @@ test("shows a simple model select grouped by capability", async ({ page }) => {
   await expect(page.locator('#models optgroup[label="Creative & Strategy"]')).toHaveCount(1);
   await expect(page.locator('#models optgroup[label="Fast Everyday Work"]')).toHaveCount(1);
   await expect(page.locator('#models optgroup[label="Product & Technical"]')).toHaveCount(1);
+  await expect(
+    page.locator('#models optgroup[label="Image, Audio & Video"] option'),
+  ).toHaveText(["studio/pixel-1"]);
 
   await page.locator("#models").selectOption("qwen/qwen3-coder");
   await expect(page.locator("#models")).toHaveValue("qwen/qwen3-coder");
@@ -126,8 +129,9 @@ test("discovers models and generates masked command previews for every client", 
   await loadModels(page);
 
   await expect(page.locator("#models")).toBeEnabled();
-  await expect(page.locator("#models option")).toHaveCount(3);
-  await expect(page.locator("#model-count-hint")).toHaveText("3 models available");
+  await expect(page.locator("#models")).toHaveValue("cx/gpt-5.6-luna");
+  await expect(page.locator("#models option")).toHaveCount(4);
+  await expect(page.locator("#model-count-hint")).toHaveText("4 models available");
   await expect(page.locator("#ready-state .badge-text")).toHaveText("Ready");
   await expect(page.locator("#command")).toContainText("ANTHROPIC_AUTH_TOKEN");
   await expect(page.locator("#command")).not.toContainText("sk-e2e-secret");
@@ -160,9 +164,9 @@ test("copies the real setup and restore commands", async ({ page, context }) => 
   await expect(page.locator("#copy-command .copy-btn-text")).toHaveText("Copied to Clipboard");
   const setupCommand = await page.evaluate(() => navigator.clipboard.readText());
   expect(setupCommand).toContain("export HC_KEY='sk-e2e-secret'");
-  expect(setupCommand).toContain("export HC_MODEL='cx/gpt-5.6-sol'");
+  expect(setupCommand).toContain("export HC_MODEL='cx/gpt-5.6-luna'");
   expect(setupCommand).toContain("[4/4] Configuration saved");
-  expect(setupCommand).toContain("claude --model 'cx/gpt-5.6-sol'");
+  expect(setupCommand).toContain("claude --model 'cx/gpt-5.6-luna'");
   expect(setupCommand).not.toContain("claude -p");
 
   await page.locator("details").first().locator("summary").click();

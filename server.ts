@@ -218,46 +218,121 @@ async function fetchGateway(
   throw new Error("Gateway redirected too many times.");
 }
 
-function addModelId(models: Set<string>, value: unknown): void {
-  if (typeof value !== "string") return;
-  const model = value.trim();
-  if (model) models.add(model);
+export type ModelInfo = {
+  id: string;
+  /** Provider or owner reported by the gateway, e.g. "openai", "qwen". */
+  owner?: string;
+  /** Free-form grouping label the gateway already assigns, e.g. "chat", "image". */
+  category?: string;
+  /** Output modalities, lowercased: "text", "image", "audio", "video". */
+  modalities?: string[];
+};
+
+const OWNER_KEYS = ["owned_by", "ownedBy", "owner", "provider", "vendor", "organization"];
+const CATEGORY_KEYS = ["category", "group", "family", "type", "task", "endpoint", "mode"];
+const MODALITY_KEYS = [
+  "modality",
+  "modalities",
+  "output_modalities",
+  "outputModalities",
+  "capabilities",
+  "tags",
+];
+
+function readString(entry: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = entry[key];
+    if (typeof value === "string" && value.trim()) return value.trim().toLowerCase();
+  }
+  return undefined;
 }
 
-function collectModelEntries(value: unknown, models: Set<string>): void {
+function readStringList(entry: Record<string, unknown>, keys: string[]): string[] {
+  const found = new Set<string>();
+
+  for (const key of keys) {
+    const value = entry[key];
+    const items = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
+    for (const item of items) {
+      if (typeof item !== "string") continue;
+      const normalized = item.trim().toLowerCase();
+      if (normalized) found.add(normalized);
+    }
+  }
+
+  return [...found];
+}
+
+function toModelInfo(id: string, entry: Record<string, unknown> | null): ModelInfo {
+  const info: ModelInfo = { id };
+  if (!entry) return info;
+
+  const architecture =
+    entry.architecture && typeof entry.architecture === "object" && !Array.isArray(entry.architecture)
+      ? (entry.architecture as Record<string, unknown>)
+      : {};
+
+  const owner = readString(entry, OWNER_KEYS);
+  // "model" is the default OpenAI `object` value and says nothing about grouping.
+  const category = readString(entry, CATEGORY_KEYS);
+  const modalities = [
+    ...readStringList(entry, MODALITY_KEYS),
+    ...readStringList(architecture, MODALITY_KEYS),
+  ];
+
+  if (owner) info.owner = owner;
+  if (category && category !== "model" && category !== "list") info.category = category;
+  if (modalities.length) info.modalities = [...new Set(modalities)];
+
+  return info;
+}
+
+function addModel(models: Map<string, ModelInfo>, value: unknown, entry?: Record<string, unknown>): void {
+  if (typeof value !== "string") return;
+  const id = value.trim();
+  if (!id) return;
+
+  const info = toModelInfo(id, entry ?? null);
+  const existing = models.get(id);
+  // First sighting wins for the id itself; later entries only fill in blanks.
+  models.set(id, existing ? { ...info, ...existing } : info);
+}
+
+function collectModelEntries(value: unknown, models: Map<string, ModelInfo>): void {
   if (!Array.isArray(value)) return;
 
   for (const item of value) {
     if (typeof item === "string") {
-      addModelId(models, item);
+      addModel(models, item);
       continue;
     }
     if (!item || typeof item !== "object") continue;
 
     const entry = item as Record<string, unknown>;
-    addModelId(models, entry.id ?? entry.model ?? entry.slug ?? entry.name);
+    addModel(models, entry.id ?? entry.model ?? entry.slug ?? entry.name, entry);
   }
 }
 
-function collectModelMap(value: unknown, models: Set<string>): void {
+function collectModelMap(value: unknown, models: Map<string, ModelInfo>): void {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
 
   for (const [modelId, details] of Object.entries(value as Record<string, unknown>)) {
     if (details && typeof details === "object" && !Array.isArray(details)) {
       const entry = details as Record<string, unknown>;
       const explicitId = entry.id ?? entry.model ?? entry.slug;
-      addModelId(models, explicitId ?? modelId);
+      addModel(models, explicitId ?? modelId, entry);
     } else {
-      addModelId(models, modelId);
+      addModel(models, modelId);
     }
   }
 }
 
 /**
- * Extracts model IDs from common OpenAI-compatible and multi-provider gateway shapes.
+ * Extracts models, with any grouping metadata the gateway supplies, from common
+ * OpenAI-compatible and multi-provider gateway shapes.
  */
-export function extractModelIds(payload: unknown): string[] {
-  const models = new Set<string>();
+export function extractModels(payload: unknown): ModelInfo[] {
+  const models = new Map<string, ModelInfo>();
 
   if (Array.isArray(payload)) {
     collectModelEntries(payload, models);
@@ -270,13 +345,13 @@ export function extractModelIds(payload: unknown): string[] {
     collectModelMap(root.models, models);
 
     const providers = root.providers;
-    const providerEntries = Array.isArray(providers)
-      ? providers
+    const providerEntries: [string | undefined, unknown][] = Array.isArray(providers)
+      ? providers.map((provider) => [undefined, provider])
       : providers && typeof providers === "object"
-        ? Object.values(providers as Record<string, unknown>)
+        ? Object.entries(providers as Record<string, unknown>)
         : [];
 
-    for (const provider of providerEntries) {
+    for (const [providerName, provider] of providerEntries) {
       if (Array.isArray(provider)) {
         collectModelEntries(provider, models);
         continue;
@@ -284,14 +359,30 @@ export function extractModelIds(payload: unknown): string[] {
       if (!provider || typeof provider !== "object") continue;
 
       const providerPayload = provider as Record<string, unknown>;
+      const before = new Set(models.keys());
+
       collectModelEntries(providerPayload.data, models);
       collectModelEntries(providerPayload.models, models);
       collectModelEntries(providerPayload.value, models);
       collectModelMap(providerPayload.models, models);
+
+      // A model nested under a provider inherits that provider as its owner.
+      const owner = readString(providerPayload, OWNER_KEYS) ?? providerName?.toLowerCase();
+      if (!owner) continue;
+      for (const [id, info] of models) {
+        if (!before.has(id) && !info.owner) models.set(id, { ...info, owner });
+      }
     }
   }
 
-  return [...models].sort((left, right) => left.localeCompare(right));
+  return [...models.values()].sort((left, right) => left.id.localeCompare(right.id));
+}
+
+/**
+ * Extracts just the model IDs, sorted, from a gateway payload.
+ */
+export function extractModelIds(payload: unknown): string[] {
+  return extractModels(payload).map((model) => model.id);
 }
 
 /**
@@ -363,13 +454,21 @@ async function handleModelsDiscovery(
     }
 
     const payload = await response.json();
-    const discovered = extractModelIds(payload);
+    const discovered = extractModels(payload);
 
     if (!discovered.length) {
       return jsonResponse({ error: "The gateway returned no models." }, 502);
     }
 
-    return jsonResponse({ models: discovered });
+    // Only models the gateway actually described; the client groups by this when
+    // present and falls back to name heuristics otherwise. Omitted entirely for
+    // gateways that report nothing but ids.
+    const details = discovered.filter((model) => model.owner || model.category || model.modalities);
+
+    return jsonResponse({
+      models: discovered.map((model) => model.id),
+      ...(details.length ? { details } : {}),
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Gateway request failed.";
     return jsonResponse({ error: message }, 502);

@@ -13,8 +13,10 @@ const handler = createRequestHandler({
     return Response.json({
       data: [
         { id: "cx/gpt-5.6-sol" },
-        { id: "gpt-4.1-mini" },
+        { id: "cx/gpt-5.6-luna" },
         { id: "qwen/qwen3-coder" },
+        // Grouped from gateway metadata rather than from the name.
+        { id: "studio/pixel-1", owned_by: "studio", output_modalities: ["image"] },
       ],
     });
   }) as typeof fetch,
