@@ -41,6 +41,33 @@ docker run -d -p 3000:3000 --name ai-cli-config-studio ai-cli-config-studio
 
 Then open [http://localhost:3000](http://localhost:3000) in your browser.
 
+### Deploy or Update on a VPS
+
+Push the latest code to GitHub from your development computer:
+
+```bash
+git push origin main
+```
+
+On the VPS, change to the directory containing `docker-compose.yml`. For example:
+
+```bash
+cd /docker/ai-cli-config-studio
+```
+
+Run each deployment command separately and wait for it to finish before running the next one:
+
+```bash
+docker compose build --pull --no-cache
+docker compose up -d --force-recreate
+docker compose ps
+docker compose logs --tail=100
+```
+
+The Compose configuration builds the application directly from the latest `main` branch on GitHub. The VPS directory therefore only needs the `docker-compose.yml` file; it does not need to be a Git clone. Do not split options such as `--pull`, `--no-cache`, `--force-recreate`, or `--tail=100` onto separate shell commands.
+
+For future updates, push the changes to GitHub and repeat the `docker compose build` and `docker compose up` commands on the VPS.
+
 ---
 
 ## 📚 Documentation & Key Features
